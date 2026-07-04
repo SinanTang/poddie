@@ -1,0 +1,31 @@
+{
+  "name": "poddie",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Transcript-based video podcast editor (local, personal use)",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src tests",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.5.0",
+    "electron": "^36.3.0",
+    "electron-vite": "^3.1.0",
+    "eslint": "^9.27.0",
+    "typescript": "^5.8.0",
+    "typescript-eslint": "^8.32.0",
+    "vite": "^6.3.0",
+    "vitest": "^3.1.0"
+  }
+}
