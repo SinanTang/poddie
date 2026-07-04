@@ -43,6 +43,22 @@
 - Burn captions: `-vf "subtitles=out.srt"` (SRT times must be post-cut timeline)
 - Progress: `-progress pipe:1` → parse `out_time_us` against total kept duration
 
+## Real footage baseline (footage/IMG_0470.MOV, measured 2026-07-05)
+- iPhone recording: **HEVC** (proxy path confirmed necessary), portrait 1080×1920,
+  ~30 fps, 44.5 min, 5.0 GB, AAC audio — gitignored via `footage/*`
+- Whisper-prep extraction: 21.3 MB m4a in **5.7 s** (≈470× realtime) — extraction
+  is effectively free; no progress UI needed for it, a spinner suffices
+- 64 kbps mono m4a ≈ 0.48 MB/min → 25 MB Whisper cap hit at ~52 min; this 44.5 min
+  file fits in ONE request, so chunking is only exercised by longer recordings
+
+## Environment gotchas (this Mac)
+- `EPERM uv_cwd`: third-party binaries (node, python) were denied getcwd() inside
+  ~/Documents while file I/O by absolute path worked. User-side macOS permission
+  fix resolved it. If it recurs, dev tooling dies mysteriously — check this first.
+- Homebrew ffmpeg was silently broken (x265 dylib mismatch) — `which ffmpeg`
+  proving existence ≠ binary launches. resolveTool() runs `-version` as a health
+  check on every candidate, which caught this; keep that behavior.
+
 ## Open questions (resolve during build, not before)
 - Does wavesurfer 7 handle a 1 h m4a decode fast enough, or do we need
   precomputed peaks? (measure in Phase 3)

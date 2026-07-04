@@ -38,11 +38,11 @@ interface Gap  { after: number /* word id */; start: number; end: number; remove
 ## Phases
 
 ### Phase 1: Scaffold & Media Pipeline
-**Status**: pending
-- [ ] Electron + Vite + React + TS scaffold (electron-vite), strict TS, ESLint
-- [ ] Main-process media service: ffprobe metadata, audio extraction (mono 16 kHz m4a), peaks generation
-- [ ] IPC contract (typed) between main and renderer
-- [ ] Smoke test: open an iPhone .mov, see metadata in UI
+**Status**: complete (pending user smoke test in UI)
+- [x] Electron + Vite + React + TS scaffold (electron-vite), strict TS, ESLint
+- [x] Main-process media service: ffprobe metadata, audio extraction (mono 16 kHz m4a); peaks deferred to Phase 3 (try wavesurfer's own decode first, per findings)
+- [x] IPC contract (typed) between main and renderer (src/shared/types.ts)
+- [x] Smoke test: 4 vitest tests pass (probe + extract on generated H.264 fixture); real footage (footage/IMG_0470.MOV) probed and audio-extracted headlessly — UI click-through by user pending
 
 ### Phase 2: Transcription & Project Persistence
 **Status**: pending
@@ -91,4 +91,5 @@ interface Gap  { after: number /* word id */; start: number; end: number; remove
 ## Errors Encountered
 | Error | Attempt | Resolution |
 |-------|---------|------------|
-| (none yet) | | |
+| `EPERM uv_cwd` — node/python couldn't call getcwd() inside ~/Documents (file I/O by path worked; Apple binaries worked; independent of tool sandbox) | 3 (sandbox off, chdir-after-start, inode check) | macOS permission issue on the user's side; user fixed it (session interrupt), node worked afterwards. If it recurs: check terminal app's Files-and-Folders/Full-Disk access, or move repo out of ~/Documents |
+| `dyld: Library not loaded libx265.215.dylib` — homebrew ffmpeg 8.1 broken after partial upgrade (x265 soname mismatch); `which ffmpeg` succeeded but binary couldn't launch | 1 | `brew reinstall ffmpeg` → 8.1.2 works |
