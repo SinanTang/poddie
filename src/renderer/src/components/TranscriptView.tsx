@@ -4,6 +4,7 @@ import { fmtDuration } from '../../../shared/format'
 import { buildParagraphs, findWordAtTime, type MatchRange } from '../lib/transcript'
 import type { EditItem } from '../../../shared/edit'
 import type { TranscriptSegment } from '../../../shared/types'
+import type { SaveStatus } from '../App'
 
 interface TranscriptViewProps {
   items: EditItem[]
@@ -17,6 +18,21 @@ interface TranscriptViewProps {
   canRedo: boolean
   onUndo: () => void
   onRedo: () => void
+  saveStatus: SaveStatus
+}
+
+function SaveIndicator({ status }: { status: SaveStatus }): React.JSX.Element | null {
+  switch (status.state) {
+    case 'clean':
+      return null
+    case 'pending':
+    case 'saving':
+      return <span className="save-status">Saving…</span>
+    case 'saved':
+      return <span className="save-status ok">✓ Saved {status.at}</span>
+    case 'failed':
+      return <span className="save-status bad">⚠ Save failed — see error above</span>
+  }
 }
 
 interface ParagraphViewProps {
@@ -111,7 +127,8 @@ export function TranscriptView({
   canUndo,
   canRedo,
   onUndo,
-  onRedo
+  onRedo,
+  saveStatus
 }: TranscriptViewProps): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null)
   const draggingRef = useRef(false)
@@ -227,6 +244,7 @@ export function TranscriptView({
           {selection ? 'drag/⇧click to select · ⌫ delete or restore' : 'click seeks · drag selects'}
         </span>
         <span className="toolbar-actions">
+          <SaveIndicator status={saveStatus} />
           <button className="ghost small" onClick={onUndo} disabled={!canUndo} title="Undo (⌘Z)">
             ↩ Undo
           </button>

@@ -52,6 +52,13 @@ function ApiKeyBar({ status, onSaved }: { status: ApiKeyStatus; onSaved: (s: Api
 
 type ProxyState = { status: 'none' | 'preparing' | 'ready'; path: string | null; fraction: number }
 
+export type SaveStatus =
+  | { state: 'clean' }
+  | { state: 'pending' }
+  | { state: 'saving' }
+  | { state: 'saved'; at: string }
+  | { state: 'failed' }
+
 interface EditHistory {
   items: EditItem[]
   past: ItemChange[][]
@@ -72,6 +79,7 @@ export default function App(): React.JSX.Element {
   const [activeMatch, setActiveMatch] = useState(0)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>({ state: 'clean' })
   const dirtyRef = useRef(false)
 
   useEffect(() => {
@@ -97,6 +105,7 @@ export default function App(): React.JSX.Element {
       setEditState(null)
     }
     dirtyRef.current = false
+    setSaveStatus({ state: 'clean' })
   }, [project])
 
   const items = editState?.items ?? null
@@ -104,22 +113,25 @@ export default function App(): React.JSX.Element {
   const applyEdit = useCallback((changes: ItemChange[]) => {
     if (changes.length === 0) return
     dirtyRef.current = true
+    setSaveStatus({ state: 'pending' })
     setEditState((s) => s && { items: applyChanges(s.items, changes, 'next'), past: [...s.past, changes], future: [] })
   }, [])
 
   const undo = useCallback(() => {
-    dirtyRef.current = true
     setEditState((s) => {
       if (!s || s.past.length === 0) return s
+      dirtyRef.current = true
+      setSaveStatus({ state: 'pending' })
       const changes = s.past[s.past.length - 1]
       return { items: applyChanges(s.items, changes, 'prev'), past: s.past.slice(0, -1), future: [changes, ...s.future] }
     })
   }, [])
 
   const redo = useCallback(() => {
-    dirtyRef.current = true
     setEditState((s) => {
       if (!s || s.future.length === 0) return s
+      dirtyRef.current = true
+      setSaveStatus({ state: 'pending' })
       const changes = s.future[0]
       return { items: applyChanges(s.items, changes, 'next'), past: [...s.past, changes], future: s.future.slice(1) }
     })
@@ -153,9 +165,14 @@ export default function App(): React.JSX.Element {
     if (!video || !items || !dirtyRef.current) return
     const timer = setTimeout(() => {
       dirtyRef.current = false
+      setSaveStatus({ state: 'saving' })
       window.poddie
         .saveEdit(video.path, { version: 1, gapMinSec: GAP_MIN_SEC, items })
-        .catch((err) => setError(`Autosave failed: ${err instanceof Error ? err.message : String(err)}`))
+        .then(() => setSaveStatus({ state: 'saved', at: new Date().toLocaleTimeString() }))
+        .catch((err) => {
+          setSaveStatus({ state: 'failed' })
+          setError(`Autosave failed: ${err instanceof Error ? err.message : String(err)}`)
+        })
     }, 800)
     return () => clearTimeout(timer)
   }, [items, video])
@@ -338,6 +355,7 @@ export default function App(): React.JSX.Element {
                   canRedo={(editState?.future.length ?? 0) > 0}
                   onUndo={undo}
                   onRedo={redo}
+                  saveStatus={saveStatus}
                 />
               ) : (
                 <div className="empty-state">

@@ -186,7 +186,21 @@ input[type='search'] {
 
 .toolbar-actions {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 10px;
+}
+
+.save-status {
+  color: #9ca3af;
+  font-variant-numeric: tabular-nums;
+}
+
+.save-status.ok {
+  color: #34d399;
+}
+
+.save-status.bad {
+  color: #f87171;
 }
 
 .follow {
