@@ -84,7 +84,7 @@ interface Gap  { after: number /* word id */; start: number; end: number; remove
 - [x] Progress bar fixed: PUSH→POLL (getExportProgress invoke every 400 ms); robust to renderer reloads — user-confirmed working (see errors table)
 
 ### Phase 5.1: In-place transcript text editing + waveform zoom
-**Status**: implemented 2026-07-05 — awaiting user verification in the app
+**Status**: complete ✅ (2026-07-05 — user confirmed both features work in the app)
 
 Motivation: Whisper mis-splits tokens ("cons ult ing", "D PO firm", CJK char-tokens)
 and drops punctuation; the user needs to clean the transcript for readable captions.
@@ -107,14 +107,21 @@ manual region selection.
 - [x] Minimap deferred (YAGNI until zoom navigation actually hurts).
 - Verified: region re-shading perf unchanged (same count, recreated per edit as before); peaks JSON measured, not bloated.
 
-### Phase 5.5 (candidate, user-suggested): Audio-only export
-- [ ] "Export audio (.m4a/.mp3)" — same keptRanges, atrim/concat only, no video encode (seconds not minutes); for Apple Podcasts / Spotify RSS feeds. Await user go-ahead.
+### Phase 5.5: Audio-only export
+**Status**: implemented 2026-07-05 — awaiting user verification in the app
+- [x] "Export audio only…" button (disabled when the source has no audio stream) → save dialog whose format dropdown picks M4A (AAC 192k, +faststart) or MP3 (libmp3lame 192k); format derived from the chosen extension
+- [x] Not a separate code path: `buildExportArgs` gained a format param (`mp4`|`m4a`|`mp3`); video presence falls out of the format, so audio-only is the same trim/concat graph minus the video chains. `exportVideo` renamed → `exportMedia`; videotoolbox→x264 fallback only applies to mp4 (audio encodes are software, seconds not minutes)
+- [x] Same guarantees as video export: .part-then-rename, cancel, poll-based progress, Show-in-Finder; fail-fast error when exporting audio from a silent video
+- [x] Tests: builder units (m4a atrim-only graph + faststart, mp3 codec/no-faststart, no-audio-stream throws) + real ffmpeg 3-cut m4a (audio-only stream, duration ±0.3 s) and mp3 exports — 82 tests total
 
 ### Phase 6: Advanced (if time allows)
 **Status**: pending
+- [ ] Captions: generate SRT from kept words remapped to the output timeline; optional burn-in via ffmpeg `subtitles` filter on export
 - [ ] Filler-word detection: token match against configurable list (um, uh, like, you know…) → "Remove all N fillers" with per-item review
 - [ ] Silence auto-detection: gaps > threshold (default 0.75 s) → bulk trim, keeping padding (e.g. 0.15 s each side)
-- [ ] Captions: generate SRT from kept words remapped to the output timeline; optional burn-in via ffmpeg `subtitles` filter on export
+- [ ] Use open source Whisper model to replace API call to whisper-1 for transcript generation
+- [ ] Use a local LLM (e.g. Qwen3) to edit transcript for filler-word auto-detection, fixing typos, minor corrections and adding punctuations.
+
 
 ## Key Risks
 | Risk | Mitigation |

@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { buildExportArgs, exportVideo } from '../src/main/export'
+import { buildExportArgs, exportMedia } from '../src/main/export'
 import { ffprobeJson } from '../src/main/media'
 import { runTool } from '../src/main/ffmpeg'
 
@@ -32,7 +32,7 @@ describe('buildExportArgs', () => {
   ]
 
   test('single range uses plain input seeking, no filter graph', () => {
-    const args = buildExportArgs('in.mov', [{ start: 1, end: 3 }], 'out.mp4', 'libx264', true)
+    const args = buildExportArgs('in.mov', [{ start: 1, end: 3 }], 'out.mp4', 'mp4', true, 'libx264')
     expect(args).toContain('-ss')
     expect(args).toContain('1.000')
     expect(args).toContain('-t')
@@ -41,7 +41,7 @@ describe('buildExportArgs', () => {
   })
 
   test('multi-range builds trim/atrim + concat graph', () => {
-    const args = buildExportArgs('in.mov', ranges, 'out.mp4', 'videotoolbox', true)
+    const args = buildExportArgs('in.mov', ranges, 'out.mp4', 'mp4', true)
     const graph = args[args.indexOf('-filter_complex') + 1]
     expect(graph).toContain('[0:v]trim=start=1.000:end=2.000,setpts=PTS-STARTPTS[v0]')
     expect(graph).toContain('[0:a]atrim=start=4.000:end=5.500,asetpts=PTS-STARTPTS[a1]')
@@ -50,19 +50,39 @@ describe('buildExportArgs', () => {
   })
 
   test('audio-less source builds a video-only graph', () => {
-    const args = buildExportArgs('in.mov', ranges, 'out.mp4', 'libx264', false)
+    const args = buildExportArgs('in.mov', ranges, 'out.mp4', 'mp4', false, 'libx264')
     const graph = args[args.indexOf('-filter_complex') + 1]
     expect(graph).not.toContain('atrim')
     expect(graph).toContain('concat=n=2:v=1:a=0[v]')
     expect(args.join(' ')).not.toContain('-c:a')
   })
 
-  test('empty ranges throw', () => {
-    expect(() => buildExportArgs('in.mov', [], 'out.mp4', 'libx264', true)).toThrow(/nothing to export/i)
+  test('audio-only m4a: atrim-only graph, no video encode, faststart kept', () => {
+    const args = buildExportArgs('in.mov', ranges, 'out.m4a', 'm4a', true)
+    const graph = args[args.indexOf('-filter_complex') + 1]
+    expect(graph).not.toContain('[0:v]') // no video trim chains…
+    expect(graph).toContain('atrim=start') // …only audio ones
+    expect(graph).toContain('[a0][a1]concat=n=2:v=0:a=1[a]')
+    expect(args).toContain('-vn')
+    expect(args.join(' ')).not.toContain('-c:v')
+    expect(args.join(' ')).toContain('-c:a aac')
+    expect(args).toContain('+faststart')
+  })
+
+  test('audio-only mp3 uses libmp3lame and no mp4 flags', () => {
+    const args = buildExportArgs('in.mov', [{ start: 1, end: 3 }], 'out.mp3', 'mp3', true)
+    expect(args.join(' ')).toContain('-c:a libmp3lame')
+    expect(args.join(' ')).not.toContain('faststart')
+    expect(args).toContain('-vn')
+  })
+
+  test('empty ranges and audio export without an audio stream throw', () => {
+    expect(() => buildExportArgs('in.mov', [], 'out.mp4', 'mp4', true)).toThrow(/nothing to export/i)
+    expect(() => buildExportArgs('in.mov', ranges, 'out.m4a', 'm4a', false)).toThrow(/no audio stream/i)
   })
 })
 
-describe('exportVideo (real ffmpeg)', () => {
+describe('exportMedia (real ffmpeg)', () => {
   test('multi-cut export: correct duration, A/V present and in sync', async () => {
     const out = join(tmp, 'edited.mp4')
     // 3 kept ranges totaling 4 s out of the 10 s source
@@ -72,7 +92,7 @@ describe('exportVideo (real ffmpeg)', () => {
       { start: 7, end: 9 }
     ]
     const fractions: number[] = []
-    await exportVideo(sample, ranges, out, { onProgress: (f) => fractions.push(f) })
+    await exportMedia(sample, ranges, out, 'mp4', { onProgress: (f) => fractions.push(f) })
 
     expect(existsSync(out)).toBe(true)
     expect(existsSync(`${out}.part.mp4`)).toBe(false)
@@ -98,9 +118,37 @@ describe('exportVideo (real ffmpeg)', () => {
     const controller = new AbortController()
     setTimeout(() => controller.abort(), 120)
     await expect(
-      exportVideo(sample, [{ start: 0, end: 10 }], out, { onProgress: () => {}, signal: controller.signal })
+      exportMedia(sample, [{ start: 0, end: 10 }], out, 'mp4', { onProgress: () => {}, signal: controller.signal })
     ).rejects.toThrow(/cancel/i)
     expect(existsSync(out)).toBe(false)
     expect(existsSync(`${out}.part.mp4`)).toBe(false)
+  }, 60_000)
+
+  test('audio-only m4a export: audio stream only, cuts applied', async () => {
+    const out = join(tmp, 'edited.m4a')
+    const ranges = [
+      { start: 1, end: 2 },
+      { start: 4, end: 5 },
+      { start: 7, end: 9 }
+    ]
+    await exportMedia(sample, ranges, out, 'm4a', { onProgress: () => {} })
+
+    expect(existsSync(out)).toBe(true)
+    expect(existsSync(`${out}.part.m4a`)).toBe(false)
+    const probe = await ffprobeJson(out)
+    const duration = Number(probe.format?.duration)
+    expect(duration).toBeGreaterThan(3.8)
+    expect(duration).toBeLessThan(4.3)
+    expect(probe.streams?.some((s) => s.codec_type === 'video')).toBe(false)
+    expect(probe.streams?.find((s) => s.codec_type === 'audio')?.codec_name).toBe('aac')
+  }, 60_000)
+
+  test('audio-only mp3 export produces a valid mp3', async () => {
+    const out = join(tmp, 'edited.mp3')
+    await exportMedia(sample, [{ start: 1, end: 3 }], out, 'mp3', { onProgress: () => {} })
+
+    const probe = await ffprobeJson(out)
+    expect(Number(probe.format?.duration)).toBeCloseTo(2, 0)
+    expect(probe.streams?.find((s) => s.codec_type === 'audio')?.codec_name).toBe('mp3')
   }, 60_000)
 })

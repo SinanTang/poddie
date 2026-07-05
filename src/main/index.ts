@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
 import { basename, dirname, join } from 'node:path'
-import { exportVideo } from './export'
+import { exportMedia, type ExportFormat } from './export'
 import type { TimeRange } from '../shared/edit'
 import { computePeaks, ensurePreviewProxy, extractAudio, ffprobeJson, probeVideo } from './media'
 import { startMediaServer, type MediaServer } from './media-server'
@@ -129,23 +129,31 @@ app.whenReady().then(async () => {
     })
   })
 
-  handleIpc(IPC.exportStart, async (event, videoPath: string, ranges: TimeRange[]) => {
+  handleIpc(IPC.exportStart, async (event, videoPath: string, ranges: TimeRange[], kind: 'video' | 'audio') => {
     if (exportAbort) throw new Error('An export is already running')
     if (!Array.isArray(ranges) || ranges.length === 0) throw new Error('Nothing to export: every range was cut')
 
     const win = BrowserWindow.fromWebContents(event.sender)
     const stem = basename(videoPath).replace(/\.[^.]+$/, '')
+    const audio = kind === 'audio'
     const { canceled, filePath: outPath } = await dialog.showSaveDialog(win!, {
-      defaultPath: join(dirname(videoPath), `${stem}-edited.mp4`),
-      filters: [{ name: 'MP4 Video', extensions: ['mp4'] }]
+      defaultPath: join(dirname(videoPath), `${stem}-edited.${audio ? 'm4a' : 'mp4'}`),
+      // for audio, the dialog's format dropdown picks the container
+      filters: audio
+        ? [
+            { name: 'M4A Audio (AAC)', extensions: ['m4a'] },
+            { name: 'MP3 Audio', extensions: ['mp3'] }
+          ]
+        : [{ name: 'MP4 Video', extensions: ['mp4'] }]
     })
     if (canceled || !outPath) return null
+    const format: ExportFormat = audio ? (outPath.toLowerCase().endsWith('.mp3') ? 'mp3' : 'm4a') : 'mp4'
 
     exportAbort = new AbortController()
     exportFraction = 0
-    log('info', 'export', `start: ${videoPath} → ${outPath} (${ranges.length} ranges)`)
+    log('info', 'export', `start: ${videoPath} → ${outPath} (${format}, ${ranges.length} ranges)`)
     try {
-      await exportVideo(videoPath, ranges, outPath, {
+      await exportMedia(videoPath, ranges, outPath, format, {
         signal: exportAbort.signal,
         onProgress: (fraction) => {
           exportFraction = fraction

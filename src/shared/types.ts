@@ -115,8 +115,16 @@ export interface PoddieApi {
   ensureProxy(videoPath: string): Promise<{ proxyPath: string }>
   onProxyProgress(cb: (fraction: number) => void): () => void
   getPeaks(videoPath: string): Promise<PeaksResult>
-  /** Save dialog + cut/concat/re-encode. Null when the user cancels (dialog or mid-export). */
-  exportVideo(videoPath: string, ranges: import('./edit').TimeRange[]): Promise<{ outPath: string } | null>
+  /**
+   * Save dialog + cut/concat/re-encode. 'video' → mp4; 'audio' → m4a or mp3
+   * (chosen in the save dialog) for podcast feeds. Null when the user cancels
+   * (dialog or mid-export).
+   */
+  exportMedia(
+    videoPath: string,
+    ranges: import('./edit').TimeRange[],
+    kind: 'video' | 'audio'
+  ): Promise<{ outPath: string } | null>
   cancelExport(): Promise<void>
   /** Current export completion in [0,1]. Polled (not pushed) so it survives renderer reloads. */
   getExportProgress(): Promise<number>

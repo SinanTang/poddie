@@ -150,6 +150,8 @@
   landscape 1920×1080 (YouTube-shaped); vertical platforms letterbox it.
 - Gap: audio-first podcast feeds (Apple/Spotify RSS) want MP3/M4A — audio-only
   export offered to user, logged as Phase 5.5 candidate in task_plan.
+  (Shipped 2026-07-05: m4a=AAC 192k +faststart, mp3=libmp3lame 192k; the save
+  dialog's format dropdown picks the container.)
 
 ## Environment gotchas (this Mac)
 - `EPERM uv_cwd`: third-party binaries (node, python) were denied getcwd() inside

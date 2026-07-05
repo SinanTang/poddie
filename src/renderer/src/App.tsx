@@ -303,13 +303,13 @@ export default function App(): React.JSX.Element {
     }
   }
 
-  async function doExport(): Promise<void> {
+  async function doExport(kind: 'video' | 'audio'): Promise<void> {
     if (!video || kept.length === 0) return
     setError(null)
     setExportResult(null)
     setExporting({ fraction: 0 })
     try {
-      const result = await window.poddie.exportVideo(video.path, kept)
+      const result = await window.poddie.exportMedia(video.path, kept, kind)
       if (result) setExportResult(result.outPath) // null = dialog or mid-export cancel
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -473,9 +473,19 @@ export default function App(): React.JSX.Element {
                       </button>
                     </>
                   ) : (
-                    <button onClick={doExport} disabled={kept.length === 0}>
-                      Export {fmtDuration(keptSec)} video…
-                    </button>
+                    <>
+                      <button onClick={() => void doExport('video')} disabled={kept.length === 0}>
+                        Export {fmtDuration(keptSec)} video…
+                      </button>
+                      <button
+                        className="ghost"
+                        onClick={() => void doExport('audio')}
+                        disabled={kept.length === 0 || !video.audioCodec}
+                        title="M4A or MP3 for podcast feeds — same cuts, no video"
+                      >
+                        Export audio only…
+                      </button>
+                    </>
                   )}
                   {exportResult && (
                     <div className="export-result">

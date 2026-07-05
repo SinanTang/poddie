@@ -101,7 +101,22 @@
 - Tests 78/78 ✅ (+9: patch-model toggle/apply updates, textEditChanges,
   mergeWithPrevChanges incl. chain + gap-block, keptRanges-invariance
   "text never moves audio", stale-peaks-cache recompute) typecheck ✅ lint ✅
-- Awaiting user verification in the app UI
+- User confirmed both features work → Phase 5.1 COMPLETE ✅
+
+## Session 2026-07-05 (Phase 5.5: audio-only export)
+- export.ts: ExportFormat ('mp4'|'m4a'|'mp3') param on buildExportArgs — video
+  presence derives from format, so audio-only reuses the same trim/concat
+  builder minus video chains (no second code path). exportVideo → exportMedia;
+  encoder fallback scoped to mp4 only. AUDIO_ARGS: aac 192k (mp4/m4a, both
+  +faststart) / libmp3lame 192k (mp3, no movflags).
+- IPC export:start takes kind 'video'|'audio'; audio save dialog offers
+  M4A/MP3 filters, format read from the chosen extension. Renderer:
+  window.poddie.exportMedia(path, ranges, kind); new "Export audio only…"
+  ghost button (disabled without an audio stream). Progress/cancel/.part/
+  reveal shared with video export unchanged.
+- Tests 82/82 ✅ typecheck ✅ lint ✅ (+4: m4a graph units, mp3 codec args,
+  no-audio throw, real ffmpeg 3-cut m4a + single-cut mp3 exports)
+- Awaiting user verification in the app (export real 44-min audio)
 
 ## Test results
 - 2026-07-05: `npm run typecheck` ✅  `npm run lint` ✅  `npm test` ✅ 4/4
