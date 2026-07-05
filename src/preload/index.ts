@@ -8,6 +8,7 @@ const api: PoddieApi = {
   getApiKeyStatus: () => ipcRenderer.invoke(IPC.apiKeyStatus),
   setApiKey: (key) => ipcRenderer.invoke(IPC.apiKeySet, key),
   loadProject: (videoPath) => ipcRenderer.invoke(IPC.projectLoad, videoPath),
+  saveEdit: (videoPath, edit) => ipcRenderer.invoke(IPC.projectSaveEdit, videoPath, edit),
   transcribe: (videoPath) => ipcRenderer.invoke(IPC.transcribeStart, videoPath),
   onTranscribeProgress: (cb) => {
     const listener = (_event: IpcRendererEvent, p: TranscribeProgress): void => cb(p)

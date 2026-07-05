@@ -1,10 +1,18 @@
 import { needsSpaceBetween } from '../../../shared/cjk'
-import type { TranscriptSegment, TranscriptWord } from '../../../shared/types'
+import type { TranscriptSegment } from '../../../shared/types'
+
+/** Anything with text and a time span: transcript words or edit items (gaps have text ''). */
+export interface TimedToken {
+  text: string
+  start: number
+  end: number
+}
 
 /**
  * Lowercased concatenation of all tokens (same spacing rules as display) plus
  * per-token char offsets, so a query like 审计 or "you know" can match across
- * token boundaries and map back to word indices.
+ * token boundaries and map back to token indices. Zero-width tokens (gaps)
+ * keep the offset arrays index-aligned but contribute no text.
  */
 export interface SearchIndex {
   text: string
@@ -12,18 +20,18 @@ export interface SearchIndex {
   ends: number[]
 }
 
-export function buildSearchIndex(words: TranscriptWord[]): SearchIndex {
+export function buildSearchIndex(tokens: readonly TimedToken[]): SearchIndex {
   let text = ''
   const starts: number[] = []
   const ends: number[] = []
   let prev = ''
-  for (const w of words) {
-    const token = w.text.toLowerCase()
-    if (text && needsSpaceBetween(prev, w.text)) text += ' '
+  for (const t of tokens) {
+    const lower = t.text.toLowerCase()
+    if (lower && text && needsSpaceBetween(prev, t.text)) text += ' '
     starts.push(text.length)
-    text += token
+    text += lower
     ends.push(text.length)
-    prev = w.text
+    if (lower) prev = t.text
   }
   return { text, starts, ends }
 }
@@ -45,22 +53,36 @@ export function findMatches(index: SearchIndex, query: string): MatchRange[] {
     if (at < 0) break
     const end = at + q.length
     let startWord = greatestLeq(index.starts, at)
-    if (index.ends[startWord] <= at) startWord++ // match began in the separator space
-    const endWord = greatestLeq(index.starts, end - 1)
+    // skip zero-width tokens and separator-space landings
+    while (startWord < index.ends.length - 1 && index.ends[startWord] <= at) startWord++
+    let endWord = greatestLeq(index.starts, end - 1)
+    while (endWord > startWord && index.starts[endWord] === index.ends[endWord]) endWord--
     matches.push({ startWord, endWord })
     from = at + q.length
   }
   return matches
 }
 
-/** Index of the last word whose start is <= t, or -1 before the first word. */
-export function findWordAtTime(words: TranscriptWord[], t: number): number {
-  return greatestLeqBy(words, t, (w) => w.start)
+/** Index of the last token whose start is <= t, or -1 before the first. */
+export function findWordAtTime(tokens: readonly TimedToken[], t: number): number {
+  let lo = 0
+  let hi = tokens.length - 1
+  let best = -1
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    if (tokens[mid].start <= t) {
+      best = mid
+      lo = mid + 1
+    } else {
+      hi = mid - 1
+    }
+  }
+  return best
 }
 
 export interface Paragraph {
   startSec: number
-  /** [from, to) range into the words array. */
+  /** [from, to) range into the token array. */
   from: number
   to: number
 }
@@ -68,24 +90,24 @@ export interface Paragraph {
 const MIN_PARAGRAPH_WORDS = 50
 
 /**
- * Group words into paragraphs along Whisper segment boundaries, merging
- * segments until each paragraph has a readable minimum of words.
+ * Group tokens into paragraphs along Whisper segment boundaries, merging
+ * segments until each paragraph has a readable minimum of tokens.
  */
-export function buildParagraphs(words: TranscriptWord[], segments: TranscriptSegment[]): Paragraph[] {
-  if (words.length === 0) return []
-  if (segments.length === 0) return [{ startSec: words[0].start, from: 0, to: words.length }]
+export function buildParagraphs(tokens: readonly TimedToken[], segments: TranscriptSegment[]): Paragraph[] {
+  if (tokens.length === 0) return []
+  if (segments.length === 0) return [{ startSec: tokens[0].start, from: 0, to: tokens.length }]
 
   const paragraphs: Paragraph[] = []
   let w = 0
   let from = 0
   for (const seg of segments) {
-    while (w < words.length && words[w].start < seg.end) w++
+    while (w < tokens.length && tokens[w].start < seg.end) w++
     if (w - from >= MIN_PARAGRAPH_WORDS) {
-      paragraphs.push({ startSec: words[from].start, from, to: w })
+      paragraphs.push({ startSec: tokens[from].start, from, to: w })
       from = w
     }
   }
-  if (from < words.length) paragraphs.push({ startSec: words[from].start, from, to: words.length })
+  if (from < tokens.length) paragraphs.push({ startSec: tokens[from].start, from, to: tokens.length })
   return paragraphs
 }
 
@@ -97,22 +119,6 @@ function greatestLeq(sorted: number[], target: number): number {
   while (lo <= hi) {
     const mid = (lo + hi) >> 1
     if (sorted[mid] <= target) {
-      best = mid
-      lo = mid + 1
-    } else {
-      hi = mid - 1
-    }
-  }
-  return best
-}
-
-function greatestLeqBy<T>(items: T[], target: number, key: (item: T) => number): number {
-  let lo = 0
-  let hi = items.length - 1
-  let best = -1
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1
-    if (key(items[mid]) <= target) {
       best = mid
       lo = mid + 1
     } else {

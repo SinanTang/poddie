@@ -30,6 +30,23 @@
   search cases from the actual transcript)
 - Pre-warmed 44-min proxy into app cache (background ffmpeg, key 8eae1de9d0de2961)
 
+## Session 2026-07-05 (Phase 4)
+- shared/edit.ts: EditItem (word|gap unified), deriveItems, removedRanges (merge
+  + micro-hole absorption), keptRanges (complement + sliver drop),
+  toggleRangeChanges (delete-or-restore), applyChanges (immutable, reversible)
+- Persistence: project.edit = full EditState (items incl. text/times/removed) —
+  chose duplication over parallel-array indices for corruption-resistance
+- TranscriptView: custom selection (drag/shift-click, native selection off),
+  gap chips, cut styling, Delete/Escape keys, undo/redo toolbar
+- Waveform: cut shading + enableDragSelection → delete via overlap mapping
+- App: EditHistory state, ⌘Z/⇧⌘Z, debounced autosave, skip-preview rAF
+  controller, edited-duration summary
+- lib/transcript.ts genericized to TimedToken (items with zero-width gaps);
+  fixed spacing bug for empty tokens in search index
+- Tests 63/63 ✅ typecheck ✅ lint ✅ (edit.test.ts covers the plan's "test
+  hard" list: empty edit, everything removed, adjacent merge, micro-holes,
+  toggle semantics, undo reversibility)
+
 ## Test results
 - 2026-07-05: `npm run typecheck` ✅  `npm run lint` ✅  `npm test` ✅ 4/4
   (probe metadata, no-video-stream rejection, mono-16kHz extraction, cache hit)

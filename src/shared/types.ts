@@ -50,6 +50,8 @@ export interface Project {
   videoPath: string
   fingerprint: VideoFingerprint
   transcript: Transcript | null
+  /** Edit state (words + gap tokens with removed flags); null until first edit. */
+  edit?: import('./edit').EditState | null
   updatedAt: string
 }
 
@@ -84,6 +86,7 @@ export const IPC = {
   apiKeyStatus: 'apiKey:status',
   apiKeySet: 'apiKey:set',
   projectLoad: 'project:load',
+  projectSaveEdit: 'project:saveEdit',
   transcribeStart: 'transcribe:start',
   transcribeProgress: 'transcribe:progress',
   proxyEnsure: 'proxy:ensure',
@@ -99,6 +102,7 @@ export interface PoddieApi {
   getApiKeyStatus(): Promise<ApiKeyStatus>
   setApiKey(key: string): Promise<ApiKeyStatus>
   loadProject(videoPath: string): Promise<Project | null>
+  saveEdit(videoPath: string, edit: import('./edit').EditState): Promise<void>
   /** Resolves to null when the user cancels the cost-confirmation dialog. */
   transcribe(videoPath: string): Promise<Project | null>
   /** Subscribe to transcription progress; returns an unsubscribe function. */

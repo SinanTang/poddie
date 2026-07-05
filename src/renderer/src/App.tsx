@@ -1,5 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { fmtBytes, fmtDuration, whisperCostUsd } from '../../shared/format'
+import {
+  applyChanges,
+  deriveItems,
+  GAP_MIN_SEC,
+  keptRanges,
+  removedRanges,
+  toggleRangeChanges,
+  type EditItem,
+  type ItemChange
+} from '../../shared/edit'
 import { buildSearchIndex, findMatches } from './lib/transcript'
 import { SearchBar } from './components/SearchBar'
 import { TranscriptView } from './components/TranscriptView'
@@ -42,10 +52,17 @@ function ApiKeyBar({ status, onSaved }: { status: ApiKeyStatus; onSaved: (s: Api
 
 type ProxyState = { status: 'none' | 'preparing' | 'ready'; path: string | null; fraction: number }
 
+interface EditHistory {
+  items: EditItem[]
+  past: ItemChange[][]
+  future: ItemChange[][]
+}
+
 export default function App(): React.JSX.Element {
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [video, setVideo] = useState<VideoInfo | null>(null)
   const [project, setProject] = useState<Project | null>(null)
+  const [editState, setEditState] = useState<EditHistory | null>(null)
   const [keyStatus, setKeyStatus] = useState<ApiKeyStatus | null>(null)
   const [tProgress, setTProgress] = useState<TranscribeProgress | null>(null)
   const [proxy, setProxy] = useState<ProxyState>({ status: 'none', path: null, fraction: 0 })
@@ -55,6 +72,7 @@ export default function App(): React.JSX.Element {
   const [activeMatch, setActiveMatch] = useState(0)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const dirtyRef = useRef(false)
 
   useEffect(() => {
     window.poddie.getAppInfo().then(setAppInfo).catch(() => setAppInfo(null))
@@ -68,6 +86,112 @@ export default function App(): React.JSX.Element {
       offProxy()
     }
   }, [])
+
+  // (Re)initialize edit state whenever the project changes: saved edits win,
+  // otherwise derive words + gap tokens fresh from the transcript
+  useEffect(() => {
+    if (project?.transcript) {
+      const items = project.edit?.items ?? deriveItems(project.transcript.words, project.transcript.durationSec)
+      setEditState({ items, past: [], future: [] })
+    } else {
+      setEditState(null)
+    }
+    dirtyRef.current = false
+  }, [project])
+
+  const items = editState?.items ?? null
+
+  const applyEdit = useCallback((changes: ItemChange[]) => {
+    if (changes.length === 0) return
+    dirtyRef.current = true
+    setEditState((s) => s && { items: applyChanges(s.items, changes, 'next'), past: [...s.past, changes], future: [] })
+  }, [])
+
+  const undo = useCallback(() => {
+    dirtyRef.current = true
+    setEditState((s) => {
+      if (!s || s.past.length === 0) return s
+      const changes = s.past[s.past.length - 1]
+      return { items: applyChanges(s.items, changes, 'prev'), past: s.past.slice(0, -1), future: [changes, ...s.future] }
+    })
+  }, [])
+
+  const redo = useCallback(() => {
+    dirtyRef.current = true
+    setEditState((s) => {
+      if (!s || s.future.length === 0) return s
+      const changes = s.future[0]
+      return { items: applyChanges(s.items, changes, 'next'), past: [...s.past, changes], future: s.future.slice(1) }
+    })
+  }, [])
+
+  const onToggleRange = useCallback(
+    (from: number, to: number) => {
+      if (items) applyEdit(toggleRangeChanges(items, from, to))
+    },
+    [items, applyEdit]
+  )
+
+  // waveform drag-selection deletes every item the span meaningfully overlaps
+  const onWaveformSelect = useCallback(
+    (start: number, end: number) => {
+      if (!items) return
+      const changes: ItemChange[] = []
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i]
+        if (item.removed) continue
+        const overlap = Math.min(item.end, end) - Math.max(item.start, start)
+        if (overlap > Math.min(0.05, (item.end - item.start) / 2)) changes.push({ index: i, prev: false, next: true })
+      }
+      applyEdit(changes)
+    },
+    [items, applyEdit]
+  )
+
+  // debounced autosave of edit state into the project file
+  useEffect(() => {
+    if (!video || !items || !dirtyRef.current) return
+    const timer = setTimeout(() => {
+      dirtyRef.current = false
+      window.poddie
+        .saveEdit(video.path, { version: 1, gapMinSec: GAP_MIN_SEC, items })
+        .catch((err) => setError(`Autosave failed: ${err instanceof Error ? err.message : String(err)}`))
+    }, 800)
+    return () => clearTimeout(timer)
+  }, [items, video])
+
+  const cuts = useMemo(() => (items ? removedRanges(items) : []), [items])
+  const kept = useMemo(
+    () => (items && video ? keptRanges(items, video.durationSec) : []),
+    [items, video]
+  )
+
+  // preview controller: while playing, hop over removed ranges
+  useEffect(() => {
+    if (!videoEl || cuts.length === 0) return
+    const duration = video?.durationSec ?? 0
+    let raf = 0
+    const tick = (): void => {
+      if (!videoEl.paused && !videoEl.seeking) {
+        const t = videoEl.currentTime
+        for (const r of cuts) {
+          if (r.start > t) break
+          if (t >= r.start && t < r.end - 0.01) {
+            if (r.end >= duration - 0.05) {
+              videoEl.pause()
+              videoEl.currentTime = r.start
+            } else {
+              videoEl.currentTime = r.end + 0.001
+            }
+            break
+          }
+        }
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [videoEl, cuts, video])
 
   async function openVideo(): Promise<void> {
     setError(null)
@@ -120,7 +244,7 @@ export default function App(): React.JSX.Element {
   }
 
   const transcript = project?.transcript ?? null
-  const searchIndex = useMemo(() => (transcript ? buildSearchIndex(transcript.words) : null), [transcript])
+  const searchIndex = useMemo(() => (items ? buildSearchIndex(items) : null), [items])
   const matches = useMemo(() => (searchIndex ? findMatches(searchIndex, query) : []), [searchIndex, query])
 
   useEffect(() => {
@@ -134,7 +258,7 @@ export default function App(): React.JSX.Element {
     [matches.length]
   )
 
-  // Global keys: space play/pause, ←/→ nudge 3 s, ⌘F focus search
+  // Global keys: space play/pause, ←/→ nudge 3 s, ⌘F search, ⌘Z/⇧⌘Z undo/redo
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
       if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
@@ -143,7 +267,14 @@ export default function App(): React.JSX.Element {
         return
       }
       const target = e.target as HTMLElement
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || !videoEl) return
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) redo()
+        else undo()
+        return
+      }
+      if (!videoEl) return
       if (e.code === 'Space') {
         e.preventDefault()
         if (videoEl.paused) void videoEl.play()
@@ -156,11 +287,13 @@ export default function App(): React.JSX.Element {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [videoEl])
+  }, [videoEl, undo, redo])
 
   const playerPath = video ? (video.needsProxy ? proxy.path : video.path) : null
   const playerSrc = playerPath && appInfo ? `${appInfo.mediaBaseUrl}/${encodeURIComponent(playerPath)}` : null
   const costEstimate = video ? whisperCostUsd(video.durationSec).toFixed(2) : null
+  const keptSec = kept.reduce((acc, r) => acc + r.end - r.start, 0)
+  const cutSec = video ? Math.max(0, video.durationSec - keptSec) : 0
 
   return (
     <div className="app">
@@ -193,13 +326,18 @@ export default function App(): React.JSX.Element {
         <>
           <div className="workspace">
             <div className="transcript-pane">
-              {transcript ? (
+              {items ? (
                 <TranscriptView
-                  words={transcript.words}
-                  segments={transcript.segments}
+                  items={items}
+                  segments={transcript?.segments ?? []}
                   videoEl={videoEl}
                   matches={matches}
                   activeMatch={activeMatch}
+                  onToggleRange={onToggleRange}
+                  canUndo={(editState?.past.length ?? 0) > 0}
+                  canRedo={(editState?.future.length ?? 0) > 0}
+                  onUndo={undo}
+                  onRedo={redo}
                 />
               ) : (
                 <div className="empty-state">
@@ -238,6 +376,11 @@ export default function App(): React.JSX.Element {
                     {transcript.costUsd != null && ` · $${transcript.costUsd.toFixed(2)}`}
                   </div>
                 )}
+                {cutSec > 0.05 && (
+                  <div className="edit-summary">
+                    Edited: {fmtDuration(keptSec)} kept · {fmtDuration(cutSec)} cut
+                  </div>
+                )}
               </div>
               {transcript && (
                 <button className="ghost small" onClick={transcribe} disabled={busy !== null || !keyStatus?.present}>
@@ -253,7 +396,11 @@ export default function App(): React.JSX.Element {
           </div>
 
           <footer className="wave-pane">
-            {videoEl && peaks ? <Waveform mediaEl={videoEl} peaks={peaks} /> : <div className="waveform-placeholder" />}
+            {videoEl && peaks ? (
+              <Waveform mediaEl={videoEl} peaks={peaks} removedRanges={cuts} onRangeSelect={onWaveformSelect} />
+            ) : (
+              <div className="waveform-placeholder" />
+            )}
           </footer>
         </>
       ) : (

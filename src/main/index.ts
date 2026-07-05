@@ -3,7 +3,8 @@ import { join } from 'node:path'
 import { computePeaks, ensurePreviewProxy, extractAudio, ffprobeJson, probeVideo } from './media'
 import { startMediaServer, type MediaServer } from './media-server'
 import { getApiKey, getApiKeyStatus, loadEnvFile, setApiKey } from './config'
-import { loadProject } from './project'
+import { loadProject, saveProject } from './project'
+import type { EditState } from '../shared/edit'
 import { transcribeVideo } from './transcribe'
 import { getLogPath, initLogger, log, logError } from './logger'
 import { fmtDuration, whisperCostUsd } from '../shared/format'
@@ -83,6 +84,14 @@ app.whenReady().then(async () => {
 
   handleIpc(IPC.projectLoad, async (_event, videoPath: string) => loadProject(videoPath))
 
+  handleIpc(IPC.projectSaveEdit, async (_event, videoPath: string, edit: EditState) => {
+    const project = await loadProject(videoPath)
+    if (!project) throw new Error(`No project file to save edits into (${videoPath}.poddie.json missing)`)
+    project.edit = edit
+    await saveProject(project)
+    log('info', 'edit', `saved: ${edit.items.filter((i) => i.removed).length} of ${edit.items.length} items removed`)
+  })
+
   handleIpc(IPC.transcribeStart, async (event, videoPath: string) => {
     const { key } = await getApiKey(app.getPath('userData'))
     if (!key) throw new Error('No OpenAI API key configured — set OPENAI_API_KEY or save a key in the app')
@@ -99,7 +108,7 @@ app.whenReady().then(async () => {
       message: `Send ${fmtDuration(durationSec)} of audio to OpenAI Whisper?`,
       detail:
         `Estimated cost: $${whisperCostUsd(durationSec).toFixed(2)} ($0.006/min).` +
-        (existing?.transcript ? '\n\nThis will REPLACE the existing transcript for this video.' : '')
+        (existing?.transcript ? '\n\nThis will REPLACE the existing transcript and reset any edits.' : '')
     })
     if (response !== 1) return null
 

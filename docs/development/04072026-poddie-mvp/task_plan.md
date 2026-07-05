@@ -65,13 +65,14 @@ interface Gap  { after: number /* word id */; start: number; end: number; remove
 - [ ] User visual check of viewer on real footage (proxy pre-warmed in background)
 
 ### Phase 4: Editing (the core)
-**Status**: pending
-- [ ] Select words (click-drag / shift-click) → Delete marks removed (struck-through, grayed)
-- [ ] Silence gaps rendered as `[·1.2s·]` tokens, deletable like words
-- [ ] keptRanges derivation + preview controller that skips removed ranges during playback
-- [ ] Waveform: removed ranges shaded; drag-select region → delete (maps to overlapping words/gaps)
-- [ ] Undo/redo (plain state stack over word/gap states)
-- [ ] Autosave project on every edit (debounced)
+**Status**: code complete — pending user check
+- [x] Select (click-drag / shift-click) → ⌫ removes; ⌫ on fully-removed selection RESTORES (one toggle rule); click still seeks; Esc clears
+- [x] Silence gaps ≥0.35 s rendered as `1.2s` chip tokens, deletable like words (shared/edit.ts: deriveItems — silences ARE items, no special cases)
+- [x] keptRanges = complement of merged removed ranges over [0,duration] (micro-hole absorption, sliver dropping — hard unit-tested); preview controller (rAF) hops cuts during playback, pauses at a cut reaching EOF
+- [x] Waveform: removed ranges shaded red (regions plugin); drag-select on waveform → deletes overlapping items (>50% or >0.05 s overlap)
+- [x] Undo/redo: ItemChange[] stacks, ⌘Z/⇧⌘Z + toolbar buttons; item count never changes so indices stay valid
+- [x] Autosave: debounced 800 ms → project.edit (full items persisted — self-contained, survives derivation changes); "X kept · Y cut" summary in video pane
+- [ ] User check on real footage
 
 ### Phase 5: Export
 **Status**: pending

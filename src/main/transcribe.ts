@@ -61,6 +61,7 @@ export async function transcribeVideo(videoPath: string, deps: TranscribeDeps): 
     videoPath,
     fingerprint: await fingerprintOf(videoPath),
     transcript,
+    edit: null,
     updatedAt: new Date().toISOString()
   }
   await saveProject(project)
