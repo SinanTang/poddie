@@ -2,7 +2,10 @@ import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { extractAudio, probeVideo } from './media'
-import { IPC } from '../shared/types'
+import { getApiKey, getApiKeyStatus, setApiKey } from './config'
+import { loadProject } from './project'
+import { transcribeVideo } from './transcribe'
+import { IPC, type TranscribeProgress } from '../shared/types'
 
 // The renderer loads local video files via media:// (file:// is blocked from
 // an http:// dev-server origin). stream + supportFetchAPI let <video> seek.
@@ -46,6 +49,24 @@ app.whenReady().then(() => {
 
   ipcMain.handle(IPC.extractAudio, async (_event, videoPath: string) => {
     return extractAudio(videoPath, join(app.getPath('userData'), 'cache'))
+  })
+
+  ipcMain.handle(IPC.apiKeyStatus, async () => getApiKeyStatus(app.getPath('userData')))
+
+  ipcMain.handle(IPC.apiKeySet, async (_event, key: string) => setApiKey(app.getPath('userData'), key))
+
+  ipcMain.handle(IPC.projectLoad, async (_event, videoPath: string) => loadProject(videoPath))
+
+  ipcMain.handle(IPC.transcribeStart, async (event, videoPath: string) => {
+    const { key } = await getApiKey(app.getPath('userData'))
+    if (!key) throw new Error('No OpenAI API key configured — set OPENAI_API_KEY or save a key in the app')
+    return transcribeVideo(videoPath, {
+      cacheDir: join(app.getPath('userData'), 'cache'),
+      apiKey: key,
+      onProgress: (p: TranscribeProgress) => {
+        if (!event.sender.isDestroyed()) event.sender.send(IPC.transcribeProgress, p)
+      }
+    })
   })
 
   createWindow()

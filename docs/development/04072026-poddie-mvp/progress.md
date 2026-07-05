@@ -23,3 +23,18 @@
 - 2026-07-05: real footage headless run: HEVC 1080×1920 44.5 min 5 GB probed;
   audio extracted 21.3 MB in 5.7 s
 - Pending: user UI smoke test (Open Video → metadata card + HEVC banner)
+
+## Session 2026-07-05 (Phase 2)
+- New main modules: config.ts (API key: env > stored config, 0600), whisper.ts
+  (transcribeAudioFile with injectable fetch + retry), chunking.ts (pure:
+  parseSilences/planChunks/stitchWords/stitchSegments), project.ts (atomic
+  save/load of <video>.poddie.json), transcribe.ts (orchestrator + progress)
+- IPC: apiKey:status/set, project:load, transcribe:start (+progress event);
+  preload + App.tsx updated (key bar, transcribe button w/ cost estimate,
+  progress bar, transcript preview from segments)
+- Dev server now runs with --watch (main-process hot restart)
+- Tests: 20/20 ✅ (chunking 9, whisper 4 w/ fake fetch, project 3, media 4);
+  typecheck ✅ lint ✅
+- BLOCKED on E2E: no OPENAI_API_KEY yet (user setting it up). Test plan when
+  ready: cut 2-min slice of footage → transcribe (~$0.01) → verify words JSON →
+  then full 44-min file (~$0.27, single chunk, no chunking path exercised)

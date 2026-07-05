@@ -5,3 +5,4 @@ tests/.tmp/
 .DS_Store
 *.log
 footage/*
+tests/.tmp*/

@@ -105,3 +105,65 @@ button:disabled {
 .hint {
   color: #9ca3af;
 }
+
+.key-status.ok {
+  color: #34d399;
+  font-size: 13px;
+}
+
+.key-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.key-entry input {
+  background: #26282e;
+  border: 1px solid #3f4451;
+  border-radius: 6px;
+  color: #e6e6e6;
+  padding: 7px 10px;
+  font-size: 13px;
+  width: 220px;
+}
+
+.key-error {
+  color: #f87171;
+  font-size: 12px;
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #9ca3af;
+}
+
+.progress progress {
+  width: 160px;
+}
+
+.transcript {
+  margin-top: 20px;
+}
+
+.transcript h2 {
+  font-size: 14px;
+  font-weight: 500;
+  color: #9ca3af;
+  margin-bottom: 10px;
+}
+
+.transcript-body {
+  background: #26282e;
+  border-radius: 8px;
+  padding: 16px;
+  max-height: 320px;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.transcript-body p {
+  margin-bottom: 10px;
+}

@@ -45,12 +45,13 @@ interface Gap  { after: number /* word id */; start: number; end: number; remove
 - [x] Smoke test: 4 vitest tests pass (probe + extract on generated H.264 fixture); real footage (footage/IMG_0470.MOV) probed and audio-extracted headlessly — UI click-through by user pending
 
 ### Phase 2: Transcription & Project Persistence
-**Status**: pending
-- [ ] Whisper API client in main process (word timestamps, verbose_json)
-- [ ] Chunking for >25 MB audio with timestamp offsetting + boundary word stitching
-- [ ] Progress reporting to renderer (extracting → uploading → transcribing)
-- [ ] Project file save/load (`<video>.poddie.json`), auto-load when reopening same video
-- [ ] API key entry UI (settings) if env var absent
+**Status**: code complete — awaiting real API end-to-end test (user setting up OPENAI_API_KEY)
+- [x] Whisper API client in main process (whisper.ts: verbose_json + word/segment granularity, injectable fetch, 429/5xx retry with backoff)
+- [x] Chunking for >25 MB audio (chunking.ts: silencedetect-snapped boundaries, offsetting, seam-overlap dedup in stitchWords)
+- [x] Progress reporting to renderer (transcribe:progress events; extracting → analyzing → transcribing i/n → saving → done)
+- [x] Project file save/load (project.ts: `<video>.poddie.json`, atomic write, version check; auto-load on video open)
+- [x] API key entry UI (config.ts + header bar; env var wins over stored key; stored 0600)
+- [ ] E2E: real Whisper call on footage/IMG_0470.MOV once key exists (do a short 2-min slice first — ~$0.01 — before the full 44-min run)
 
 ### Phase 3: Aligned Viewer (read-only)
 **Status**: pending
