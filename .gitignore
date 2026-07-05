@@ -6,3 +6,4 @@ tests/.tmp/
 *.log
 footage/*
 tests/.tmp*/
+.env
