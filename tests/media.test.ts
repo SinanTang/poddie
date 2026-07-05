@@ -37,6 +37,15 @@ describe('probeVideo', () => {
     expect(info.sizeBytes).toBeGreaterThan(0)
   })
 
+  test('reports display dimensions for rotated (iPhone-style) video', async () => {
+    const rotated = join(tmp, 'rotated.mp4')
+    await runTool('ffmpeg', ['-y', '-display_rotation', '-90', '-i', sample, '-c', 'copy', rotated])
+    const info = await probeVideo(rotated)
+    // coded 640x360 + 90° rotation flag → displays as 360x640
+    expect(info.width).toBe(360)
+    expect(info.height).toBe(640)
+  })
+
   test('rejects a file with no video stream', async () => {
     const audioOnly = join(tmp, 'audio-only.m4a')
     await runTool('ffmpeg', ['-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:a', 'aac', audioOnly])

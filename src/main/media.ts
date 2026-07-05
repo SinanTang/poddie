@@ -12,6 +12,7 @@ interface FfprobeStream {
   avg_frame_rate?: string
   channels?: number
   sample_rate?: string
+  side_data_list?: Array<{ rotation?: number }>
 }
 
 interface FfprobeOutput {
@@ -47,12 +48,17 @@ export async function probeVideo(path: string): Promise<VideoInfo> {
   if (!video || !video.codec_name) throw new Error(`No video stream found in ${path}`)
   const audio = streams.find((s) => s.codec_type === 'audio')
 
+  // iPhone stores coded dims + a rotation flag; report DISPLAY dims (what the
+  // viewer sees, and what ffmpeg's auto-rotation produces on transcode)
+  const rotation = video.side_data_list?.find((d) => d.rotation != null)?.rotation ?? 0
+  const swapped = Math.abs(rotation) % 180 === 90
+
   return {
     path,
     sizeBytes: Number(probe.format?.size ?? 0),
     durationSec: Number(probe.format?.duration ?? 0),
-    width: video.width ?? 0,
-    height: video.height ?? 0,
+    width: (swapped ? video.height : video.width) ?? 0,
+    height: (swapped ? video.width : video.height) ?? 0,
     fps: parseFps(video.avg_frame_rate),
     videoCodec: video.codec_name,
     audioCodec: audio?.codec_name ?? null,

@@ -44,8 +44,13 @@
 - Progress: `-progress pipe:1` → parse `out_time_us` against total kept duration
 
 ## Real footage baseline (footage/IMG_0470.MOV, measured 2026-07-05)
-- iPhone recording: **HEVC** (proxy path confirmed necessary), portrait 1080×1920,
+- iPhone recording: **HEVC** (proxy path confirmed necessary), coded 1080×1920
+  with **rotation −90 side data → displays LANDSCAPE 1920×1080**,
   ~30 fps, 44.5 min, 5.0 GB, AAC audio — gitignored via `footage/*`
+- probeVideo reports display dims (rotation-aware since Phase 3); ffmpeg ≥5.1
+  auto-applies the display matrix on transcode, so proxies/exports come out
+  correctly oriented with no extra flags. 44-min proxy: 512 MB 960×540, ~4 min
+  hardware encode (h264_videotoolbox), cached as 8eae1de9d0de2961.proxy.mp4
 - Whisper-prep extraction: 21.3 MB m4a in **5.7 s** (≈470× realtime) — extraction
   is effectively free; no progress UI needed for it, a spinner suffices
 - 64 kbps mono m4a ≈ 0.48 MB/min → 25 MB Whisper cap hit at ~52 min; this 44.5 min
