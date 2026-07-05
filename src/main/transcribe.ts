@@ -4,6 +4,7 @@ import { runTool } from './ffmpeg'
 import { CHUNK_TARGET_BYTES, parseSilences, planChunks, stitchSegments, stitchWords, type TimeRange } from './chunking'
 import { transcribeAudioFile, type TranscribeOptions, type WhisperResult } from './whisper'
 import { fingerprintOf, saveProject } from './project'
+import { whisperCostUsd } from '../shared/format'
 import type { Project, TranscribeProgress, Transcript } from '../shared/types'
 
 export interface TranscribeDeps {
@@ -50,6 +51,7 @@ export async function transcribeVideo(videoPath: string, deps: TranscribeDeps): 
     durationSec,
     model: 'whisper-1',
     createdAt: new Date().toISOString(),
+    costUsd: whisperCostUsd(durationSec),
     words: stitchWords(results.map((r, i) => ({ offset: chunks[i].start, words: r.words }))),
     segments: stitchSegments(results.map((r, i) => ({ offset: chunks[i].start, segments: r.segments })))
   }

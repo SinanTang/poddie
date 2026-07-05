@@ -1,11 +1,15 @@
 import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { extractAudio, probeVideo } from './media'
-import { getApiKey, getApiKeyStatus, setApiKey } from './config'
+import { extractAudio, ffprobeJson, probeVideo } from './media'
+import { getApiKey, getApiKeyStatus, loadEnvFile, setApiKey } from './config'
 import { loadProject } from './project'
 import { transcribeVideo } from './transcribe'
+import { fmtDuration, whisperCostUsd } from '../shared/format'
 import { IPC, type TranscribeProgress } from '../shared/types'
+
+// In dev, app path is the project root — picks up the user's .env (OPENAI_API_KEY)
+loadEnvFile(join(app.getAppPath(), '.env'))
 
 // The renderer loads local video files via media:// (file:// is blocked from
 // an http:// dev-server origin). stream + supportFetchAPI let <video> seek.
@@ -60,6 +64,23 @@ app.whenReady().then(() => {
   ipcMain.handle(IPC.transcribeStart, async (event, videoPath: string) => {
     const { key } = await getApiKey(app.getPath('userData'))
     if (!key) throw new Error('No OpenAI API key configured — set OPENAI_API_KEY or save a key in the app')
+
+    // Cost gate at the API boundary: nothing reaches OpenAI without an explicit OK.
+    const durationSec = Number((await ffprobeJson(videoPath)).format?.duration ?? 0)
+    const existing = await loadProject(videoPath)
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const { response } = await dialog.showMessageBox(win!, {
+      type: 'question',
+      buttons: ['Cancel', 'Transcribe'],
+      defaultId: 1,
+      cancelId: 0,
+      message: `Send ${fmtDuration(durationSec)} of audio to OpenAI Whisper?`,
+      detail:
+        `Estimated cost: $${whisperCostUsd(durationSec).toFixed(2)} ($0.006/min).` +
+        (existing?.transcript ? '\n\nThis will REPLACE the existing transcript for this video.' : '')
+    })
+    if (response !== 1) return null
+
     return transcribeVideo(videoPath, {
       cacheDir: join(app.getPath('userData'), 'cache'),
       apiKey: key,

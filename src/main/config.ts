@@ -1,6 +1,29 @@
+import { readFileSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { ApiKeyStatus } from '../shared/types'
+
+/**
+ * Minimal .env loader (KEY=VALUE lines, optional quotes/`export`, # comments).
+ * Existing process.env entries always win. Missing file is not an error.
+ */
+export function loadEnvFile(path: string): void {
+  let raw: string
+  try {
+    raw = readFileSync(path, 'utf8')
+  } catch {
+    return
+  }
+  for (const line of raw.split('\n')) {
+    const match = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/)
+    if (!match) continue
+    let value = match[2].trim()
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1)
+    }
+    if (!(match[1] in process.env)) process.env[match[1]] = value
+  }
+}
 
 interface AppConfig {
   openaiApiKey?: string

@@ -1,23 +1,9 @@
 import { useEffect, useState } from 'react'
+import { fmtBytes, fmtDuration, whisperCostUsd } from '../../shared/format'
 import type { ApiKeyStatus, Project, TranscribeProgress, VideoInfo } from '../../shared/types'
 
 function mediaUrl(path: string): string {
   return `media://${path.split('/').map(encodeURIComponent).join('/')}`
-}
-
-function fmtBytes(n: number): string {
-  if (n >= 1024 * 1024 * 1024) return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`
-  if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`
-  return `${Math.round(n / 1024)} KB`
-}
-
-function fmtDuration(sec: number): string {
-  const h = Math.floor(sec / 3600)
-  const m = Math.floor((sec % 3600) / 60)
-  const s = Math.floor(sec % 60)
-  return h > 0
-    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-    : `${m}:${String(s).padStart(2, '0')}`
 }
 
 function ApiKeyBar({ status, onSaved }: { status: ApiKeyStatus; onSaved: (s: ApiKeyStatus) => void }): React.JSX.Element {
@@ -60,8 +46,8 @@ function TranscriptPreview({ project }: { project: Project }): React.JSX.Element
   return (
     <section className="transcript">
       <h2>
-        Transcript · {t.words.length.toLocaleString()} words · {t.language} ·{' '}
-        {new Date(t.createdAt).toLocaleString()}
+        Transcript · {t.words.length.toLocaleString()} words · {t.language}
+        {t.costUsd != null && ` · $${t.costUsd.toFixed(2)}`} · {new Date(t.createdAt).toLocaleString()}
       </h2>
       <div className="transcript-body">
         {t.segments.length > 0
@@ -107,7 +93,8 @@ export default function App(): React.JSX.Element {
     setError(null)
     setBusy('Transcribing…')
     try {
-      setProject(await window.poddie.transcribe(video.path))
+      const result = await window.poddie.transcribe(video.path)
+      if (result) setProject(result) // null = user canceled the cost dialog
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
       setProgress(null)
@@ -117,7 +104,7 @@ export default function App(): React.JSX.Element {
   }
 
   const hasTranscript = project?.transcript != null
-  const costEstimate = video ? ((video.durationSec / 60) * 0.006).toFixed(2) : null
+  const costEstimate = video ? whisperCostUsd(video.durationSec).toFixed(2) : null
 
   return (
     <div className="app">

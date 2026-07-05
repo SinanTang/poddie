@@ -45,13 +45,14 @@ interface Gap  { after: number /* word id */; start: number; end: number; remove
 - [x] Smoke test: 4 vitest tests pass (probe + extract on generated H.264 fixture); real footage (footage/IMG_0470.MOV) probed and audio-extracted headlessly — UI click-through by user pending
 
 ### Phase 2: Transcription & Project Persistence
-**Status**: code complete — awaiting real API end-to-end test (user setting up OPENAI_API_KEY)
+**Status**: complete ✅ (E2E passed 2026-07-05)
 - [x] Whisper API client in main process (whisper.ts: verbose_json + word/segment granularity, injectable fetch, 429/5xx retry with backoff)
 - [x] Chunking for >25 MB audio (chunking.ts: silencedetect-snapped boundaries, offsetting, seam-overlap dedup in stitchWords)
 - [x] Progress reporting to renderer (transcribe:progress events; extracting → analyzing → transcribing i/n → saving → done)
 - [x] Project file save/load (project.ts: `<video>.poddie.json`, atomic write, version check; auto-load on video open)
 - [x] API key entry UI (config.ts + header bar; env var wins over stored key; stored 0600)
-- [ ] E2E: real Whisper call on footage/IMG_0470.MOV once key exists (do a short 2-min slice first — ~$0.01 — before the full 44-min run)
+- [x] E2E: passed on 2-min slice of real footage (`npm run test:e2e`, gated by PODDIE_E2E so `npm test` never spends API money). Key finding: podcast is CHINESE — one token per CJK char; see findings.md for Phase 3/6 impacts. Full-file transcription: user runs via app UI (~$0.27)
+- [x] .env support: loadEnvFile() in config.ts, called at app startup (env var still wins over stored config key)
 
 ### Phase 3: Aligned Viewer (read-only)
 **Status**: pending

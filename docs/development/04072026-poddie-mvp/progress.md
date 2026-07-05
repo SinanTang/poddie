@@ -35,6 +35,21 @@
 - Dev server now runs with --watch (main-process hot restart)
 - Tests: 20/20 ✅ (chunking 9, whisper 4 w/ fake fetch, project 3, media 4);
   typecheck ✅ lint ✅
-- BLOCKED on E2E: no OPENAI_API_KEY yet (user setting it up). Test plan when
-  ready: cut 2-min slice of footage → transcribe (~$0.01) → verify words JSON →
-  then full 44-min file (~$0.27, single chunk, no chunking path exercised)
+- E2E UNBLOCKED: user added OPENAI_API_KEY via .env → added loadEnvFile() to
+  config.ts (app startup) + config.test.ts; verified .env is gitignored
+- E2E PASSED (2026-07-05): 2-min slice → chinese, 399 word-tokens (one per CJK
+  char!), monotonic timestamps, project json saved, all stages reported; ~10 s
+  wall clock. `npm run test:e2e` (PODDIE_E2E-gated). Unit tests now 22/22 ✅
+- Chinese-language impacts recorded in findings.md (CJK joining, cross-token
+  search, sequence-based filler detection) — affects Phases 3 & 6
+- Next: user transcribes full 44-min file in app UI (~$0.27), then Phase 3
+
+## Session 2026-07-05 (cost transparency, user-requested)
+- Requirement recorded: podcasts are zh / en / MIXED — all transcript features
+  must be language-agnostic (findings.md)
+- shared/format.ts: fmtBytes/fmtDuration/whisperCostUsd (deduped from App.tsx)
+- Native confirmation dialog in transcribe:start IPC handler (duration + est.
+  cost + replace-warning when re-transcribing); cancel → null → renderer no-op
+- Actual cost stored as Transcript.costUsd (optional field — old project files
+  still load); shown in transcript header
+- Tests 24/24 ✅ typecheck ✅ lint ✅

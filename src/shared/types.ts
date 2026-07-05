@@ -33,6 +33,8 @@ export interface Transcript {
   durationSec: number
   model: string
   createdAt: string
+  /** Actual API cost, from extracted-audio duration. Absent in pre-cost project files. */
+  costUsd?: number
   words: TranscriptWord[]
   /** Whisper's sentence-level segments — used for paragraph breaks in the UI. */
   segments: TranscriptSegment[]
@@ -80,7 +82,8 @@ export interface PoddieApi {
   getApiKeyStatus(): Promise<ApiKeyStatus>
   setApiKey(key: string): Promise<ApiKeyStatus>
   loadProject(videoPath: string): Promise<Project | null>
-  transcribe(videoPath: string): Promise<Project>
+  /** Resolves to null when the user cancels the cost-confirmation dialog. */
+  transcribe(videoPath: string): Promise<Project | null>
   /** Subscribe to transcription progress; returns an unsubscribe function. */
   onTranscribeProgress(cb: (p: TranscribeProgress) => void): () => void
 }

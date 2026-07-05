@@ -9,7 +9,8 @@
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src tests",
-    "test": "vitest run"
+    "test": "vitest run --exclude tests/whisper-e2e.test.ts",
+    "test:e2e": "PODDIE_E2E=1 vitest run tests/whisper-e2e.test.ts"
   },
   "dependencies": {
     "react": "^19.1.0",

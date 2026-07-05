@@ -51,6 +51,32 @@
 - 64 kbps mono m4a ≈ 0.48 MB/min → 25 MB Whisper cap hit at ~52 min; this 44.5 min
   file fits in ONE request, so chunking is only exercised by longer recordings
 
+## Requirement (user, 2026-07-05): podcasts will be Chinese, English, OR mixed CN/EN
+- Never assume a single language: all transcript handling (joining, search,
+  filler lists, captions) must handle CJK tokens, Latin word tokens, and both
+  interleaved in one transcript. Whisper auto-detect stays on (no language pin).
+- Filler detection needs BOTH lists active regardless of detected language
+  (a "chinese" transcript can still contain "okay", "so", English tech terms).
+
+## E2E discovery: the podcast is in CHINESE (measured 2026-07-05, 2-min slice)
+- Whisper auto-detected `language=chinese`; returned **one word-token per CJK
+  character** (399 tokens for 2 min), each with its own timestamps
+- Design impacts:
+  - **Rendering/joining**: never join CJK tokens with spaces — join adjacent CJK
+    chars directly, keep spaces only around Latin runs (mixed zh/en likely in a
+    tech podcast). One `isCjk()` helper + smart joiner, used by preview, editor,
+    SRT generation.
+  - **Search (Phase 3)**: a query like 审计 spans two tokens — search the
+    concatenated string and map match offsets back to token indices (build a
+    concatenated text + per-token offset index).
+  - **Filler words (Phase 6)**: English list useless. Chinese fillers (嗯, 呃,
+    啊, 那个, 就是, 然后, 这个…) are 1–2 chars = 1–2 tokens → detector must match
+    token *sequences*, not single tokens. Keep list configurable.
+  - **Upside**: character-level timestamps = finer cut granularity than English.
+- Slice project file: 44 KB for 2 min → ~1 MB for 44 min. Fine as JSON.
+- Pipeline timing: 2-min slice → ~10 s wall clock total (extract + upload + API).
+  Full 44-min file ≈ estimate 2–4 min, single chunk.
+
 ## Environment gotchas (this Mac)
 - `EPERM uv_cwd`: third-party binaries (node, python) were denied getcwd() inside
   ~/Documents while file I/O by absolute path worked. User-side macOS permission
