@@ -84,7 +84,7 @@ interface Gap  { after: number /* word id */; start: number; end: number; remove
 - [x] Progress bar fixed: PUSH→POLL (getExportProgress invoke every 400 ms); robust to renderer reloads — user-confirmed working (see errors table)
 
 ### Phase 5.1: In-place transcript text editing + waveform zoom
-**Status**: complete ✅ (2026-07-05 — user confirmed both features work in the app)
+**Status**: complete ✅
 
 Motivation: Whisper mis-splits tokens ("cons ult ing", "D PO firm", CJK char-tokens)
 and drops punctuation; the user needs to clean the transcript for readable captions.
@@ -108,19 +108,26 @@ manual region selection.
 - Verified: region re-shading perf unchanged (same count, recreated per edit as before); peaks JSON measured, not bloated.
 
 ### Phase 5.5: Audio-only export
-**Status**: implemented 2026-07-05 — awaiting user verification in the app
+**Status**: complete ✅
 - [x] "Export audio only…" button (disabled when the source has no audio stream) → save dialog whose format dropdown picks M4A (AAC 192k, +faststart) or MP3 (libmp3lame 192k); format derived from the chosen extension
 - [x] Not a separate code path: `buildExportArgs` gained a format param (`mp4`|`m4a`|`mp3`); video presence falls out of the format, so audio-only is the same trim/concat graph minus the video chains. `exportVideo` renamed → `exportMedia`; videotoolbox→x264 fallback only applies to mp4 (audio encodes are software, seconds not minutes)
 - [x] Same guarantees as video export: .part-then-rename, cancel, poll-based progress, Show-in-Finder; fail-fast error when exporting audio from a silent video
 - [x] Tests: builder units (m4a atrim-only graph + faststart, mp3 codec/no-faststart, no-audio-stream throws) + real ffmpeg 3-cut m4a (audio-only stream, duration ±0.3 s) and mp3 exports — 82 tests total
 
 ### Phase 6: Advanced (if time allows)
-**Status**: pending
-- [ ] Captions: generate SRT from kept words remapped to the output timeline; optional burn-in via ffmpeg `subtitles` filter on export
+**Status**: in progress — captions implemented 2026-07-05 (awaiting user verification)
+- [x] Captions: SRT from kept words remapped to the output timeline; burn-in built but capability-gated
+  — shared/captions.ts: buildRemap (source→output via keptRanges prefix sums, cut times collapse), buildCues (breaks on 0.6 s pauses / 42-unit width with CJK=2 / 5 s max / sentence-punctuation soft break at ≥20 units; removed + blanked words excluded; CJK-aware joining), toSrt. "Export captions (.srt)…" button → save dialog → sidecar.
+  — Burn-in: buildExportArgs takes subtitlesPath → `-vf subtitles` (single range) or `[v]subtitles[vout]` after concat (multi); SRT written to cache dir (app-controlled path = safe filter quoting). GATED: this machine's homebrew ffmpeg 8.1.2 has NO libass (probed via `hasFilter('subtitles')` at startup → AppInfo.canBurnCaptions); checkbox disabled with reason; real-encode test self-skips until a libass ffmpeg is present.
+  — Real-data check: 44-min project → 654 cues, 35 KB, avg 3.8 s. Known limitation: punctuation-less zh transcript → width breaks can split a word (播/客节目); user-added punctuation (5.1a) creates soft breaks, and the Phase-6 LLM punctuation pass fixes it wholesale. Revisit Intl.Segmenter word-boundary backtracking only if it still hurts after that.
 - [ ] Filler-word detection: token match against configurable list (um, uh, like, you know…) → "Remove all N fillers" with per-item review
+  — Feasibility HIGH. Must match token SEQUENCES (CJK fillers 嗯/呃/那个/就是 = 1–2 char-tokens; see findings). Detection = pure shared code; removal = existing toggle model. Precision risk on zh (那个/就是 are often real words) → review-before-apply UI is load-bearing, not optional.
 - [ ] Silence auto-detection: gaps > threshold (default 0.75 s) → bulk trim, keeping padding (e.g. 0.15 s each side)
+  — Feasibility HIGH. Gap tokens already exist as items. Padding fits the 5.1a ItemPatch model: patch gap start/end inward by pad + removed=true in ONE undo-safe change (item count unchanged). No new mechanism needed.
 - [ ] Use open source Whisper model to replace API call to whisper-1 for transcript generation
+  — Feasibility MEDIUM (integration easy, quality is the question). Clean seam exists: transcribeAudioFile(chunk) → WhisperResult. Candidates on this M-series Mac: mlx-whisper (Metal, word_timestamps=True), whisper.cpp (Metal, weaker word timing), faster-whisper (CPU-only here). Needs large-v3 (~3 GB) for zh/mixed quality; expect minutes not seconds per episode vs $0.27 API. GATE: A/B spike against the existing paid 44-min transcript (word-timing drift drives cut accuracy) BEFORE committing. Keep API path as default/fallback — same WhisperResult contract.
 - [ ] Use a local LLM (e.g. Qwen3) to edit transcript for filler-word auto-detection, fixing typos, minor corrections and adding punctuations.
+  — Feasibility MEDIUM-HIGH with one hard constraint: LLM must NOT return rewritten prose (unalignable). Design: feed indexed tokens per segment, require structured JSON patch ops (setText i / merge i / filler i) → maps 1:1 onto the existing ItemChange model + review UI + undo; timing untouchable by construction. Runtime via Ollama/MLX (Qwen3 8–14B fits this Mac). ~9k tokens per 44-min episode → chunked calls, minutes. Could subsume filler-list detection, but list matching stays as the instant/offline baseline.
 
 
 ## Key Risks

@@ -33,6 +33,26 @@ export async function resolveTool(tool: Tool): Promise<string> {
   throw new Error(`${tool} not found (tried: ${candidates.join(', ')}). Install with: brew install ffmpeg`)
 }
 
+let filterNames: Set<string> | null = null
+
+/**
+ * Whether this ffmpeg build has a filter (e.g. `subtitles` needs libass,
+ * which homebrew's current bottle omits). Probed once, cached.
+ */
+export async function hasFilter(name: string): Promise<boolean> {
+  if (!filterNames) {
+    const { stdout } = await runTool('ffmpeg', ['-hide_banner', '-filters'])
+    // filter table lines look like " T.C subtitles VV->V  Render text subtitles…"
+    filterNames = new Set(
+      stdout
+        .split('\n')
+        .map((line) => line.trim().split(/\s+/)[1])
+        .filter(Boolean)
+    )
+  }
+  return filterNames.has(name)
+}
+
 export async function runTool(tool: Tool, args: string[]): Promise<{ stdout: string; stderr: string }> {
   const bin = await resolveTool(tool)
   try {

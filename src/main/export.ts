@@ -23,12 +23,23 @@ const AUDIO_ARGS: Record<ExportFormat, string[]> = {
 const fmt = (n: number): string => n.toFixed(3)
 
 /**
+ * The subtitles (libass) filter arg. Filtergraph quoting: wrap in single
+ * quotes, escape embedded quotes — the path is app-controlled (cache dir),
+ * so this covers everything that can actually appear in it.
+ */
+function subtitlesFilter(srtPath: string): string {
+  return `subtitles=filename='${srtPath.replace(/'/g, "'\\''")}'`
+}
+
+/**
  * ffmpeg args cutting `ranges` out of the source and concatenating them,
  * frame/sample-accurately, with one re-encode. Whether the output carries a
  * video stream falls out of the format — audio-only exports are the same
  * graph minus the video chains, not a separate code path. Single range uses
  * plain input seeking (equally accurate under re-encode, no filter graph).
  * ffmpeg's autorotation bakes iPhone display-matrix rotation into mp4 output.
+ * `subtitlesPath` burns captions in AFTER the cuts — the SRT is on the output
+ * timeline, which both paths produce (input seeking and concat reset PTS to 0).
  */
 export function buildExportArgs(
   sourcePath: string,
@@ -36,11 +47,13 @@ export function buildExportArgs(
   outPath: string,
   format: ExportFormat,
   hasAudio: boolean,
-  encoder: ExportEncoder = 'videotoolbox'
+  encoder: ExportEncoder = 'videotoolbox',
+  subtitlesPath?: string
 ): string[] {
   if (ranges.length === 0) throw new Error('Nothing to export: every range was cut')
   const video = format === 'mp4'
   if (!video && !hasAudio) throw new Error(`Cannot export ${format}: the source has no audio stream`)
+  const burnIn = video && subtitlesPath ? subtitlesFilter(subtitlesPath) : null
 
   const outputArgs = [
     ...(video ? [...ENCODER_ARGS[encoder], '-pix_fmt', 'yuv420p'] : ['-vn']),
@@ -51,7 +64,14 @@ export function buildExportArgs(
 
   if (ranges.length === 1) {
     const r = ranges[0]
-    return ['-y', '-ss', fmt(r.start), '-i', sourcePath, '-t', fmt(r.end - r.start), ...outputArgs]
+    return [
+      '-y',
+      '-ss', fmt(r.start),
+      '-i', sourcePath,
+      '-t', fmt(r.end - r.start),
+      ...(burnIn ? ['-vf', burnIn] : []),
+      ...outputArgs
+    ]
   }
 
   const parts: string[] = []
@@ -63,12 +83,13 @@ export function buildExportArgs(
   parts.push(
     `${concatInputs}concat=n=${ranges.length}:v=${video ? 1 : 0}:a=${hasAudio ? 1 : 0}${video ? '[v]' : ''}${hasAudio ? '[a]' : ''}`
   )
+  if (burnIn) parts.push(`[v]${burnIn}[vout]`)
 
   return [
     '-y',
     '-i', sourcePath,
     '-filter_complex', parts.join(';'),
-    ...(video ? ['-map', '[v]'] : []),
+    ...(video ? ['-map', burnIn ? '[vout]' : '[v]'] : []),
     ...(hasAudio ? ['-map', '[a]'] : []),
     ...outputArgs
   ]
@@ -77,6 +98,8 @@ export function buildExportArgs(
 export interface ExportOptions {
   onProgress: (fraction: number) => void
   signal?: AbortSignal
+  /** SRT file (output-timeline times) to burn into the video. mp4 only. */
+  subtitlesPath?: string
 }
 
 /**
@@ -91,7 +114,7 @@ export async function exportMedia(
   ranges: TimeRange[],
   outPath: string,
   format: ExportFormat,
-  { onProgress, signal }: ExportOptions
+  { onProgress, signal, subtitlesPath }: ExportOptions
 ): Promise<void> {
   const probe = await ffprobeJson(sourcePath)
   const hasAudio = (probe.streams ?? []).some((s) => s.codec_type === 'audio')
@@ -101,11 +124,11 @@ export async function exportMedia(
 
   try {
     try {
-      await runToolProgress('ffmpeg', buildExportArgs(sourcePath, ranges, partPath, format, hasAudio, 'videotoolbox'), keptDuration, onProgress, signal)
+      await runToolProgress('ffmpeg', buildExportArgs(sourcePath, ranges, partPath, format, hasAudio, 'videotoolbox', subtitlesPath), keptDuration, onProgress, signal)
     } catch (err) {
       if (signal?.aborted || format !== 'mp4') throw err
       log('warn', 'export', `videotoolbox failed, falling back to libx264: ${err instanceof Error ? err.message.slice(0, 200) : String(err)}`)
-      await runToolProgress('ffmpeg', buildExportArgs(sourcePath, ranges, partPath, format, hasAudio, 'libx264'), keptDuration, onProgress, signal)
+      await runToolProgress('ffmpeg', buildExportArgs(sourcePath, ranges, partPath, format, hasAudio, 'libx264', subtitlesPath), keptDuration, onProgress, signal)
     }
     await rename(partPath, outPath)
     log('info', 'export', `done: ${outPath} (${format}, ${ranges.length} ranges, ${keptDuration.toFixed(1)} s)`)

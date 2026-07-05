@@ -116,7 +116,29 @@
   reveal shared with video export unchanged.
 - Tests 82/82 ✅ typecheck ✅ lint ✅ (+4: m4a graph units, mp3 codec args,
   no-audio throw, real ffmpeg 3-cut m4a + single-cut mp3 exports)
-- Awaiting user verification in the app (export real 44-min audio)
+- User confirmed working → Phase 5.5 COMPLETE ✅
+
+## Session 2026-07-05 (Phase 6: captions)
+- Phase 6 feasibility review recorded (user added local-Whisper + local-LLM
+  items, reprioritized): captions/silence/fillers HIGH, local Whisper MEDIUM
+  (A/B spike gate vs the paid transcript), LLM cleanup MEDIUM-HIGH (JSON patch
+  ops over token indices, never free text). See task_plan + findings.
+- shared/captions.ts: buildCues (output-timeline remap via keptRanges prefix
+  sums; pause/width/duration/sentence-punct breaking; CJK width=2 units;
+  excludes removed + blanked words) + toSrt + srtTimestamp. 10 unit tests.
+- Export integration: buildExportArgs subtitlesPath param (-vf single-range /
+  [v]subtitles[vout] post-concat), ExportOptions.subtitlesPath, srt written to
+  cache dir. IPC: captions:export (save dialog → sidecar .srt), exportStart
+  gained burnInSrt arg. UI: "Export captions (.srt)…" + burn-in checkbox.
+- DISCOVERY: homebrew ffmpeg 8.1.2 has NO libass → no subtitles filter on this
+  Mac. Added hasFilter() runtime probe → AppInfo.canBurnCaptions gates the
+  checkbox (disabled + reason tooltip); burn-in real-encode test self-skips.
+  SRT sidecar path fully works regardless.
+- Real-data check: 44-min project → 654 cues, 35 KB SRT, avg 3.8 s. Known
+  limitation: punctuation-less zh → occasional mid-word width breaks; 5.1a
+  punctuation edits improve, LLM pass will fix wholesale.
+- Tests 95/95 (+2 gated skips) ✅ typecheck ✅ lint ✅
+- Awaiting user verification (export SRT for the real project)
 
 ## Test results
 - 2026-07-05: `npm run typecheck` ✅  `npm run lint` ✅  `npm test` ✅ 4/4

@@ -12,6 +12,7 @@ import {
   type EditItem,
   type ItemChange
 } from '../../shared/edit'
+import { buildCues, toSrt } from '../../shared/captions'
 import { buildSearchIndex, findMatches } from './lib/transcript'
 import { SearchBar } from './components/SearchBar'
 import { TranscriptView } from './components/TranscriptView'
@@ -84,6 +85,7 @@ export default function App(): React.JSX.Element {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ state: 'clean' })
   const [exporting, setExporting] = useState<{ fraction: number } | null>(null)
   const [exportResult, setExportResult] = useState<string | null>(null)
+  const [burnIn, setBurnIn] = useState(false)
   const dirtyRef = useRef(false)
 
   useEffect(() => {
@@ -307,14 +309,38 @@ export default function App(): React.JSX.Element {
     if (!video || kept.length === 0) return
     setError(null)
     setExportResult(null)
+    let burnInSrt: string | undefined
+    if (kind === 'video' && burnIn && items) {
+      burnInSrt = toSrt(buildCues(items, video.durationSec))
+      if (!burnInSrt) {
+        setError('No captions to burn in: every word is cut or blank')
+        return
+      }
+    }
     setExporting({ fraction: 0 })
     try {
-      const result = await window.poddie.exportMedia(video.path, kept, kind)
+      const result = await window.poddie.exportMedia(video.path, kept, kind, burnInSrt)
       if (result) setExportResult(result.outPath) // null = dialog or mid-export cancel
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setExporting(null)
+    }
+  }
+
+  async function doExportCaptions(): Promise<void> {
+    if (!video || !items) return
+    setError(null)
+    try {
+      const srt = toSrt(buildCues(items, video.durationSec))
+      if (!srt) {
+        setError('No captions to export: every word is cut or blank')
+        return
+      }
+      const result = await window.poddie.exportCaptions(video.path, srt)
+      if (result) setExportResult(result.outPath)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
     }
   }
 
@@ -474,6 +500,22 @@ export default function App(): React.JSX.Element {
                     </>
                   ) : (
                     <>
+                      <label
+                        className="burnin"
+                        title={
+                          appInfo?.canBurnCaptions
+                            ? 'Render the captions into the video frames'
+                            : 'Needs an ffmpeg build with libass (subtitles filter) — brew ffmpeg lacks it'
+                        }
+                      >
+                        <input
+                          type="checkbox"
+                          checked={burnIn && (appInfo?.canBurnCaptions ?? false)}
+                          onChange={(e) => setBurnIn(e.target.checked)}
+                          disabled={!appInfo?.canBurnCaptions}
+                        />
+                        Burn captions into video
+                      </label>
                       <button onClick={() => void doExport('video')} disabled={kept.length === 0}>
                         Export {fmtDuration(keptSec)} video…
                       </button>
@@ -484,6 +526,14 @@ export default function App(): React.JSX.Element {
                         title="M4A or MP3 for podcast feeds — same cuts, no video"
                       >
                         Export audio only…
+                      </button>
+                      <button
+                        className="ghost"
+                        onClick={() => void doExportCaptions()}
+                        disabled={kept.length === 0}
+                        title="SRT sidecar on the edited timeline — upload alongside the video"
+                      >
+                        Export captions (.srt)…
                       </button>
                     </>
                   )}

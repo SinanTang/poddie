@@ -3,9 +3,10 @@ import { existsSync } from 'node:fs'
 import { mkdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { writeFile } from 'node:fs/promises'
 import { buildExportArgs, exportMedia } from '../src/main/export'
 import { ffprobeJson } from '../src/main/media'
-import { runTool } from '../src/main/ffmpeg'
+import { hasFilter, runTool } from '../src/main/ffmpeg'
 
 const tmp = fileURLToPath(new URL('.tmp-export', import.meta.url))
 const sample = join(tmp, 'source.mp4')
@@ -80,6 +81,25 @@ describe('buildExportArgs', () => {
     expect(() => buildExportArgs('in.mov', [], 'out.mp4', 'mp4', true)).toThrow(/nothing to export/i)
     expect(() => buildExportArgs('in.mov', ranges, 'out.m4a', 'm4a', false)).toThrow(/no audio stream/i)
   })
+
+  test('burn-in single range: -vf subtitles with quoted path', () => {
+    const args = buildExportArgs('in.mov', [{ start: 1, end: 3 }], 'out.mp4', 'mp4', true, 'videotoolbox', '/tmp/some dir/c.srt')
+    const vf = args[args.indexOf('-vf') + 1]
+    expect(vf).toBe("subtitles=filename='/tmp/some dir/c.srt'")
+  })
+
+  test('burn-in multi range: subtitles chained after concat, [vout] mapped', () => {
+    const args = buildExportArgs('in.mov', ranges, 'out.mp4', 'mp4', true, 'videotoolbox', '/tmp/c.srt')
+    const graph = args[args.indexOf('-filter_complex') + 1]
+    expect(graph).toContain("concat=n=2:v=1:a=1[v][a];[v]subtitles=filename='/tmp/c.srt'[vout]")
+    expect(args).toContain('[vout]')
+    expect(args).not.toContain('-vf')
+  })
+
+  test('burn-in is ignored for audio-only formats', () => {
+    const args = buildExportArgs('in.mov', ranges, 'out.m4a', 'm4a', true, 'videotoolbox', '/tmp/c.srt')
+    expect(args.join(' ')).not.toContain('subtitles')
+  })
 })
 
 describe('exportMedia (real ffmpeg)', () => {
@@ -151,4 +171,18 @@ describe('exportMedia (real ffmpeg)', () => {
     expect(Number(probe.format?.duration)).toBeCloseTo(2, 0)
     expect(probe.streams?.find((s) => s.codec_type === 'audio')?.codec_name).toBe('mp3')
   }, 60_000)
+
+  // Gated on the same runtime capability that gates the UI: homebrew's current
+  // ffmpeg bottle lacks libass, so this only runs where burn-in actually can.
+  test('burn-in export encodes with the subtitles filter (when ffmpeg has libass)', async (ctx) => {
+    if (!(await hasFilter('subtitles'))) return ctx.skip()
+    const srtPath = join(tmp, 'cues.srt')
+    await writeFile(srtPath, '1\n00:00:00,500 --> 00:00:01,500\nhello 大家好\n', 'utf8')
+    const out = join(tmp, 'burned.mp4')
+    await exportMedia(sample, [{ start: 1, end: 3 }], out, 'mp4', { onProgress: () => {}, subtitlesPath: srtPath })
+
+    const probe = await ffprobeJson(out)
+    expect(Number(probe.format?.duration)).toBeCloseTo(2, 0)
+    expect(probe.streams?.find((s) => s.codec_type === 'video')?.codec_name).toBe('h264')
+  }, 120_000)
 })

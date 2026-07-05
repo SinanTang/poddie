@@ -1,6 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { exportMedia, type ExportFormat } from './export'
+import { hasFilter } from './ffmpeg'
 import type { TimeRange } from '../shared/edit'
 import { computePeaks, ensurePreviewProxy, extractAudio, ffprobeJson, probeVideo } from './media'
 import { startMediaServer, type MediaServer } from './media-server'
@@ -58,8 +60,15 @@ app.whenReady().then(async () => {
 
   mediaServer = await startMediaServer()
   const cacheDir = join(app.getPath('userData'), 'cache')
+  // homebrew's current ffmpeg bottle lacks libass — probe instead of assuming
+  const canBurnCaptions = await hasFilter('subtitles').catch(() => false)
+  if (!canBurnCaptions) log('info', 'captions', 'ffmpeg lacks the subtitles filter (libass) — burn-in disabled')
 
-  handleIpc(IPC.appInfo, async () => ({ logPath: getLogPath(), mediaBaseUrl: mediaServer!.baseUrl }))
+  handleIpc(IPC.appInfo, async () => ({
+    logPath: getLogPath(),
+    mediaBaseUrl: mediaServer!.baseUrl,
+    canBurnCaptions
+  }))
 
   handleIpc(IPC.selectVideo, async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog({
@@ -129,9 +138,12 @@ app.whenReady().then(async () => {
     })
   })
 
-  handleIpc(IPC.exportStart, async (event, videoPath: string, ranges: TimeRange[], kind: 'video' | 'audio') => {
+  handleIpc(IPC.exportStart, async (event, videoPath: string, ranges: TimeRange[], kind: 'video' | 'audio', burnInSrt?: string) => {
     if (exportAbort) throw new Error('An export is already running')
     if (!Array.isArray(ranges) || ranges.length === 0) throw new Error('Nothing to export: every range was cut')
+    if (burnInSrt && !canBurnCaptions) {
+      throw new Error('Caption burn-in needs an ffmpeg build with libass (the subtitles filter)')
+    }
 
     const win = BrowserWindow.fromWebContents(event.sender)
     const stem = basename(videoPath).replace(/\.[^.]+$/, '')
@@ -149,12 +161,20 @@ app.whenReady().then(async () => {
     if (canceled || !outPath) return null
     const format: ExportFormat = audio ? (outPath.toLowerCase().endsWith('.mp3') ? 'mp3' : 'm4a') : 'mp4'
 
+    let subtitlesPath: string | undefined
+    if (burnInSrt && kind === 'video') {
+      subtitlesPath = join(cacheDir, 'burn-in.srt')
+      await mkdir(cacheDir, { recursive: true })
+      await writeFile(subtitlesPath, burnInSrt, 'utf8')
+    }
+
     exportAbort = new AbortController()
     exportFraction = 0
-    log('info', 'export', `start: ${videoPath} → ${outPath} (${format}, ${ranges.length} ranges)`)
+    log('info', 'export', `start: ${videoPath} → ${outPath} (${format}${subtitlesPath ? ' +captions' : ''}, ${ranges.length} ranges)`)
     try {
       await exportMedia(videoPath, ranges, outPath, format, {
         signal: exportAbort.signal,
+        subtitlesPath,
         onProgress: (fraction) => {
           exportFraction = fraction
         }
@@ -176,6 +196,20 @@ app.whenReady().then(async () => {
 
   handleIpc(IPC.exportReveal, async (_event, path: string) => {
     shell.showItemInFolder(path)
+  })
+
+  handleIpc(IPC.captionsExport, async (event, videoPath: string, srt: string) => {
+    if (!srt) throw new Error('No captions to export: every word is cut or blank')
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const stem = basename(videoPath).replace(/\.[^.]+$/, '')
+    const { canceled, filePath: outPath } = await dialog.showSaveDialog(win!, {
+      defaultPath: join(dirname(videoPath), `${stem}-edited.srt`),
+      filters: [{ name: 'SubRip Captions', extensions: ['srt'] }]
+    })
+    if (canceled || !outPath) return null
+    await writeFile(outPath, srt, 'utf8')
+    log('info', 'captions', `SRT written: ${outPath} (${srt.length} bytes)`)
+    return { outPath }
   })
 
   createWindow()

@@ -327,6 +327,21 @@ input[type='search'] {
   padding-top: 4px;
 }
 
+.burnin {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #9ca3af;
+  cursor: pointer;
+  user-select: none;
+}
+
+.burnin:has(input:disabled) {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .export-result {
   display: flex;
   align-items: center;

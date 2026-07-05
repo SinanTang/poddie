@@ -153,6 +153,22 @@
   (Shipped 2026-07-05: m4a=AAC 192k +faststart, mp3=libmp3lame 192k; the save
   dialog's format dropdown picks the container.)
 
+## Captions facts (2026-07-05, Phase 6)
+- Homebrew ffmpeg 8.1.2 bottle has NO libass (only 17 configure flags — lean
+  build): no `subtitles` filter → burn-in impossible with this binary. Probe
+  filters at runtime (`hasFilter`), never assume. SRT sidecar is unaffected —
+  and is the better artifact anyway (YouTube/Bilibili accept SRT uploads;
+  burned captions can't be toggled/translated/indexed).
+- Output-timeline remap = keptRanges prefix sums; times inside a cut collapse
+  to the cut point (monotonic, handles every overlap edge case — no special
+  cases for merged tokens or partial cuts).
+- Real 44-min zh transcript → 654 cues / 35 KB / avg 3.8 s with breaks on
+  pause 0.6 s, width 42 units (CJK=2), max 5 s, sentence-punct soft break.
+- Whisper zh transcripts carry ~no punctuation → width breaks can split a
+  word (播/客节目). Adding punctuation via in-place editing (5.1a) creates
+  proper break points; the planned local-LLM punctuation pass solves it at
+  scale. Intl.Segmenter backtracking is the fallback if still needed.
+
 ## Environment gotchas (this Mac)
 - `EPERM uv_cwd`: third-party binaries (node, python) were denied getcwd() inside
   ~/Documents while file I/O by absolute path worked. User-side macOS permission
@@ -160,6 +176,29 @@
 - Homebrew ffmpeg was silently broken (x265 dylib mismatch) — `which ffmpeg`
   proving existence ≠ binary launches. resolveTool() runs `-version` as a health
   check on every candidate, which caught this; keep that behavior.
+
+## Phase 6 feasibility review (2026-07-05, user added local-AI items + reprioritized)
+- Captions/fillers/silence: all pure app code on existing structures (items,
+  keptRanges, ItemPatch) — no new deps, no architectural change. The 5.1a
+  field-patch refactor pays off twice: silence-trim padding = patch gap
+  start/end inward + removed (undo-safe, item count unchanged); LLM cleanup
+  edits = the same patch ops.
+- Local Whisper: the swap point is transcribeAudioFile() → WhisperResult
+  (chunking/stitching/persistence all agnostic). Candidates on Apple Silicon:
+  mlx-whisper (Metal, word_timestamps supported) > whisper.cpp (fast, but
+  token-timing weaker — timing drives CUTS here, not just display) >
+  faster-whisper (CTranslate2 = CPU-only on Mac). zh/mixed content needs
+  large-v3 (~3 GB download). Validation asset already exists: the paid
+  $0.27 44-min transcript is ground truth for an A/B timing-drift spike —
+  run the spike before building any UI/config around local mode.
+- Local LLM cleanup: token-count-preserving output is the hard requirement;
+  free-text LLM output can't be realigned to word timestamps reliably.
+  Constrain to JSON patch ops over token indices (setText/merge/filler),
+  validate indices, route through applyEdit → review UI + undo + autosave
+  for free. Qwen3 via Ollama/MLX runs comfortably on this machine.
+- Suggested build order within Phase 6: captions → silence → filler-list →
+  local-Whisper spike → LLM cleanup (each ships standalone value; the last
+  two share a "local models" config surface).
 
 ## Open questions (resolve during build, not before)
 - Does wavesurfer 7 handle a 1 h m4a decode fast enough, or do we need
