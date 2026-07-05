@@ -102,6 +102,16 @@
   uncaught exceptions/rejections
 - Renderer error banner shows the log path under every error message
 
+## Whisper token mis-splits motivate in-place editing (Phase 5.1a)
+- Real transcript shows Latin words split across tokens: "cons ult ing",
+  "D PO firm", "leg al firm", "pol icy", "im ple mentation", "sh adow AI",
+  plus missing punctuation throughout. These read badly and would make ugly
+  captions. In-place text editing is to fix the DISPLAY/CAPTION text only.
+- Load-bearing invariant for the build: text is decorative. Cuts/keptRanges/
+  export derive from time + `removed`, never from text. A text edit must produce
+  a byte-identical export. Merging mis-split tokens keeps each token's time span
+  (blank the neighbor's display text; don't delete the item, don't cut audio).
+
 ## IPC progress: POLL, don't PUSH (2026-07-05)
 - Push (`event.sender.send` from a captured handler event) is fragile in dev:
   renderer HMR reloads swap the webContents, stranding the old sender → events

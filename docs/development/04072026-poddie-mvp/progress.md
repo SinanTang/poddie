@@ -74,6 +74,14 @@
   findings. Tests still 69/69 ✅ typecheck ✅ lint ✅
 - Clarified .poddie.json edit storage + merge model to user (per-token boolean
   snapshot at line ~51610; ranges coalesce at read time)
+- User confirmed progress fix works → Phase 5 marked COMPLETE ✅ (full core flow
+  import→transcribe→edit→preview→export all done + user-verified)
+- Planned Phase 5.1 (user-requested after testing): (a) in-place transcript text
+  editing — display/caption layer only, must NOT touch cut timing; double-click
+  token → inline edit; merge mis-split tokens keeping time span; generalize the
+  undo ItemChange model to cover text edits. (b) waveform zoom — ws.zoom() +
+  higher-density precomputed peaks (~10-20 buckets/s), keep cut shading /
+  drag-delete / playhead-follow working at zoom. See task_plan Phase 5.1.
 
 ## Test results
 - 2026-07-05: `npm run typecheck` ✅  `npm run lint` ✅  `npm test` ✅ 4/4

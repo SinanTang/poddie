@@ -75,12 +75,37 @@ interface Gap  { after: number /* word id */; start: number; end: number; remove
 - [x] User check on real footage
 
 ### Phase 5: Export
-**Status**: code complete — automated A/V check passed; user listen-through of a real export pending
+**Status**: complete ✅ (2026-07-05 — user confirmed a real 44-min export produced a valid, playable file)
 - [x] ffmpeg builder from keptRanges (export.ts: pure buildExportArgs — n=1 plain input seek, n>1 trim/atrim+setpts+concat graph; audio-less variant; renderer passes LIVE kept ranges so sub-debounce edits are included)
 - [x] Encoding: h264_videotoolbox 10M → libx264 crf18 fallback, aac 192k, yuv420p, +faststart — deliberately the universal SNS/platform ingest format (see findings); exports cut the ORIGINAL file, never the proxy
-- [x] Export dialog (save panel, defaults `<stem>-edited.mp4` beside source), progress bar via -progress parse against kept duration, working Cancel (AbortController → spawn signal), .part-then-rename so failures/cancels leave no fake output, Show-in-Finder on success
+- [x] Export dialog (save panel, defaults `<stem>-edited.mp4` beside source), progress bar, working Cancel (AbortController → spawn signal), .part-then-rename so failures/cancels leave no fake output, Show-in-Finder on success
 - [x] A/V sync verified automated: 3-cut export of 10 s fixture → duration 4 s ±0.3, h264+aac, |video − audio stream duration| < 0.2 s; cancel test leaves no partial file
-- [ ] User: listen across cut joins on a real 44-min export (several minutes to encode)
+- [x] Real 44-min export: valid 3.2 GB h264/aac 44:15 file, user-confirmed playable
+- [x] Progress bar fixed: PUSH→POLL (getExportProgress invoke every 400 ms); robust to renderer reloads — user-confirmed working (see errors table)
+
+### Phase 5.1: In-place transcript text editing + waveform zoom
+**Status**: pending (planned 2026-07-05, user-requested after testing)
+
+Motivation: Whisper mis-splits tokens ("cons ult ing", "D PO firm", CJK char-tokens)
+and drops punctuation; the user needs to clean the transcript for readable captions.
+Separately, at 44 min across ~900 px the waveform is ~3 s/px — too coarse for precise
+manual region selection.
+
+**5.1a — In-place text editing (display/caption layer only; NEVER changes cut timing)**
+- [ ] Double-click a word token → inline editable input; Enter/blur commits, Esc cancels. Gap tokens are not editable.
+- [ ] Editing changes `EditItem.text` only. Cut ranges / keptRanges / export are derived from time + `removed`, so text edits have ZERO effect on the video — they exist for readability + Phase 6 captions + search. State this invariant loudly in code.
+- [ ] Fix mis-splits: a "merge with previous" action (e.g. ⌫ at input start, or a small join affordance) concatenates text into one token and blanks the neighbor's display text while KEEPING its time span (audio untouched). Merged token's [start,end] = union, so click-to-seek + caption timing stay sane.
+- [ ] Undo/redo: generalize the change model. Current `ItemChange` only flips the `removed` boolean; add a text-edit variant (index, prevText, nextText) or refactor to a generic field-patch change. Keep the "item count never changes → indices stay valid" invariant (merges blank text, don't delete items).
+- [ ] Persistence: text already lives in `project.edit.items`; debounced autosave covers it. Bump a project `edit.version` if the shape changes so old files still load.
+- [ ] Search index + CJK join already read item text → text edits flow through for free; verify.
+- Risk: don't let a text edit silently shift audio. Test: edit text of a word inside a kept range → export byte-identical to before the text edit.
+
+**5.1b — Waveform zoom for granular selection**
+- [ ] Zoom control: slider + "Fit" button + ⌘/ctrl-scroll to zoom at cursor; horizontal scroll when zoomed. Use wavesurfer 7 `ws.zoom(pxPerSec)`.
+- [ ] Peaks resolution: current peaks = 4000 buckets for the whole file (~1.5 buckets/s at 44 min) — too coarse when zoomed in. Raise precomputed bucket density (target ~10–20 buckets/s; a 44-min file ≈ 26k–53k floats, still a small JSON) OR store peaks at native sample granularity windowed. Measure JSON size + render perf before committing; keep the main-process precompute (never decode an hour of audio in the renderer).
+- [ ] Keep everything working at zoom: video↔waveform time binding, red cut shading, drag-select-to-delete overlap mapping, playhead follow (respect existing Follow toggle → auto-scroll to keep playhead visible).
+- [ ] Optional: a minimap/overview strip (wavesurfer minimap plugin) so the user keeps whole-file context while zoomed. Defer unless it feels necessary.
+- Risk: re-shading cut regions on every edit at high zoom could churn; verify region add/remove perf. Peaks JSON bloat — measure.
 
 ### Phase 5.5 (candidate, user-suggested): Audio-only export
 - [ ] "Export audio (.m4a/.mp3)" — same keptRanges, atrim/concat only, no video encode (seconds not minutes); for Apple Podcasts / Spotify RSS feeds. Await user go-ahead.
