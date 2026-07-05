@@ -159,6 +159,42 @@ export function mergeWithPrevChanges(items: EditItem[], index: number, textOverr
   ]
 }
 
+/** Auto-trim targets silences at or above this length. */
+export const SILENCE_TRIM_MIN_SEC = 0.75
+/**
+ * Kept margin inside a trimmed silence on any side that touches speech.
+ * Whisper word timestamps drift ±50–100 ms — cutting flush against a word
+ * edge risks clipping onsets, so bulk trims always cut mid-silence.
+ */
+export const SILENCE_TRIM_PAD_SEC = 0.15
+
+/**
+ * Bulk-trim long silences: each kept gap ≥ minSec is marked removed with its
+ * span shrunk inward by padSec per speech-adjacent side (file edges get no
+ * pad — leading/trailing dead air goes completely). Span + removed change in
+ * ONE patch, so a single undo restores the original silence exactly.
+ */
+export function trimSilenceChanges(
+  items: EditItem[],
+  minSec = SILENCE_TRIM_MIN_SEC,
+  padSec = SILENCE_TRIM_PAD_SEC
+): ItemChange[] {
+  const changes: ItemChange[] = []
+  for (let i = 0; i < items.length; i++) {
+    const gap = items[i]
+    if (gap.kind !== 'gap' || gap.removed || gap.end - gap.start < minSec) continue
+    const start = gap.start + (i === 0 ? 0 : padSec)
+    const end = gap.end - (i === items.length - 1 ? 0 : padSec)
+    if (end - start < MIN_KEPT_SLIVER_SEC) continue // padding ate the whole cut
+    changes.push({
+      index: i,
+      prev: { removed: false, start: gap.start, end: gap.end },
+      next: { removed: true, start, end }
+    })
+  }
+  return changes
+}
+
 export function applyChanges(items: EditItem[], changes: ItemChange[], direction: 'next' | 'prev'): EditItem[] {
   if (changes.length === 0) return items
   const out = items.slice()

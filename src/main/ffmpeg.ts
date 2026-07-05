@@ -11,16 +11,22 @@ const resolved = new Map<Tool, string>()
 /**
  * Locate a working binary. GUI-launched Electron apps don't inherit the
  * shell PATH on macOS, so we probe the common homebrew locations explicitly.
- * Override with PODDIE_FFMPEG / PODDIE_FFPROBE if needed.
+ * ffmpeg-full (keg-only, never in /opt/homebrew/bin) is preferred when
+ * installed: same codecs plus libass, which caption burn-in needs and the
+ * regular bottle lacks. Override with PODDIE_FFMPEG / PODDIE_FFPROBE.
  */
 export async function resolveTool(tool: Tool): Promise<string> {
   const cached = resolved.get(tool)
   if (cached) return cached
 
   const override = process.env[`PODDIE_${tool.toUpperCase()}`]
-  const candidates = [override, `/opt/homebrew/bin/${tool}`, `/usr/local/bin/${tool}`, tool].filter(
-    (c): c is string => Boolean(c)
-  )
+  const candidates = [
+    override,
+    `/opt/homebrew/opt/ffmpeg-full/bin/${tool}`,
+    `/opt/homebrew/bin/${tool}`,
+    `/usr/local/bin/${tool}`,
+    tool
+  ].filter((c): c is string => Boolean(c))
   for (const candidate of candidates) {
     try {
       await execFileAsync(candidate, ['-version'])

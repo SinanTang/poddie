@@ -159,6 +159,12 @@
   filters at runtime (`hasFilter`), never assume. SRT sidecar is unaffected —
   and is the better artifact anyway (YouTube/Bilibili accept SRT uploads;
   burned captions can't be toggled/translated/indexed).
+- Fix: `brew install ffmpeg-full` — bottled (no source build), 47 deps incl.
+  libass (and whisper-cpp — relevant to the Phase 6 local-Whisper item!).
+  Keg-only → lives at /opt/homebrew/opt/ffmpeg-full/bin, never conflicts with
+  regular ffmpeg. resolveTool now prefers that path automatically (override
+  order: PODDIE_FFMPEG > ffmpeg-full keg > /opt/homebrew/bin > /usr/local/bin
+  > PATH). Restart the app after installing so the startup probe re-runs.
 - Output-timeline remap = keptRanges prefix sums; times inside a cut collapse
   to the cut point (monotonic, handles every overlap edge case — no special
   cases for merged tokens or partial cuts).
