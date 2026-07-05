@@ -102,6 +102,21 @@
   uncaught exceptions/rejections
 - Renderer error banner shows the log path under every error message
 
+## IPC progress: POLL, don't PUSH (2026-07-05)
+- Push (`event.sender.send` from a captured handler event) is fragile in dev:
+  renderer HMR reloads swap the webContents, stranding the old sender → events
+  vanish, UI freezes at its last value. This bit the export progress bar (0%).
+- Poll (renderer `invoke`s a getter every N ms) always hits the live main
+  handler and current renderer — robust to reloads. Used for export progress;
+  transcribe/proxy progress still push (short-lived, less exposed, but same
+  risk — migrate if they misbehave).
+- Debugging lesson (again): the isolation-repro harness nailed this. A ~30-line
+  node script running the EXACT runToolProgress code proved the main side worked,
+  which localized the bug to IPC delivery. Build the repro before theorizing.
+- Also confirmed: `ffmpeg -progress pipe:1` needs `-f null -` (not `/dev/null`)
+  in tests or it errors instantly and encodes nothing — a self-inflicted false
+  negative that cost time. Don't suppress ffmpeg stderr while testing it.
+
 ## Export format rationale (2026-07-05, user asked re: SNS/podcast platforms)
 - MP4 + H.264 (yuv420p) + AAC + `+faststart` = universal ingest format: YouTube,
   IG/Reels, TikTok, X, Bilibili, 小红书, WeChat Channels, Spotify video all take

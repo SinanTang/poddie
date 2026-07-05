@@ -63,6 +63,18 @@
   3-cut ffmpeg export w/ A/V sync probe + cancel cleanup)
 - Pending user verification: listen across cut joins on a real full export
 
+## Session 2026-07-05 (export bugs: interruption + progress)
+- Corrupt export (moov-atom-missing, QuickTime won't open): caused by ME editing
+  files during an active export → dev --watch hot-restarts main → orphaned ffmpeg
+  mid-run. Lesson: never edit src/ while a user export runs. Later export (left
+  undisturbed) completed clean: valid 3.2 GB h264/aac 44:15 file.
+- Progress bar stuck 0%: root-caused via isolation harness to PUSH-event delivery
+  (stale event.sender after renderer HMR), NOT ffmpeg/parsing (both verified
+  working). Fix: poll via invoke (getExportProgress) — see task_plan errors +
+  findings. Tests still 69/69 ✅ typecheck ✅ lint ✅
+- Clarified .poddie.json edit storage + merge model to user (per-token boolean
+  snapshot at line ~51610; ranges coalesce at read time)
+
 ## Test results
 - 2026-07-05: `npm run typecheck` ✅  `npm run lint` ✅  `npm test` ✅ 4/4
   (probe metadata, no-video-stream rejection, mono-16kHz extraction, cache hit)

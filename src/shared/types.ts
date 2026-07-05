@@ -94,7 +94,7 @@ export const IPC = {
   audioPeaks: 'audio:peaks',
   exportStart: 'export:start',
   exportCancel: 'export:cancel',
-  exportProgress: 'export:progress',
+  exportPoll: 'export:poll',
   exportReveal: 'export:reveal'
 } as const
 
@@ -118,6 +118,7 @@ export interface PoddieApi {
   /** Save dialog + cut/concat/re-encode. Null when the user cancels (dialog or mid-export). */
   exportVideo(videoPath: string, ranges: import('./edit').TimeRange[]): Promise<{ outPath: string } | null>
   cancelExport(): Promise<void>
-  onExportProgress(cb: (fraction: number) => void): () => void
+  /** Current export completion in [0,1]. Polled (not pushed) so it survives renderer reloads. */
+  getExportProgress(): Promise<number>
   revealFile(path: string): Promise<void>
 }

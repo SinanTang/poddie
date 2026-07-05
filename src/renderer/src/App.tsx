@@ -91,15 +91,27 @@ export default function App(): React.JSX.Element {
     const offProxy = window.poddie.onProxyProgress((fraction) =>
       setProxy((p) => (p.status === 'preparing' ? { ...p, fraction } : p))
     )
-    const offExport = window.poddie.onExportProgress((fraction) =>
-      setExporting((e) => (e ? { fraction } : e))
-    )
     return () => {
       offTranscribe()
       offProxy()
-      offExport()
     }
   }, [])
+
+  // Poll export progress while an export runs. Polling (invoke) survives renderer
+  // reloads that would strand a pushed event.sender in the main process.
+  const isExporting = exporting !== null
+  useEffect(() => {
+    if (!isExporting) return
+    const id = setInterval(async () => {
+      try {
+        const fraction = await window.poddie.getExportProgress()
+        setExporting((e) => (e ? { fraction } : e))
+      } catch {
+        // transient; next tick retries
+      }
+    }, 400)
+    return () => clearInterval(id)
+  }, [isExporting])
 
   // (Re)initialize edit state whenever the project changes: saved edits win,
   // otherwise derive words + gap tokens fresh from the transcript

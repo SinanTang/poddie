@@ -24,11 +24,7 @@ const api: PoddieApi = {
   getPeaks: (videoPath) => ipcRenderer.invoke(IPC.audioPeaks, videoPath),
   exportVideo: (videoPath, ranges) => ipcRenderer.invoke(IPC.exportStart, videoPath, ranges),
   cancelExport: () => ipcRenderer.invoke(IPC.exportCancel),
-  onExportProgress: (cb) => {
-    const listener = (_event: IpcRendererEvent, fraction: number): void => cb(fraction)
-    ipcRenderer.on(IPC.exportProgress, listener)
-    return () => ipcRenderer.removeListener(IPC.exportProgress, listener)
-  },
+  getExportProgress: () => ipcRenderer.invoke(IPC.exportPoll),
   revealFile: (path) => ipcRenderer.invoke(IPC.exportReveal, path)
 }
 

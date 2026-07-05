@@ -17,6 +17,9 @@ loadEnvFile(join(app.getAppPath(), '.env'))
 
 let mediaServer: MediaServer | null = null
 let exportAbort: AbortController | null = null
+// Latest export completion [0,1], polled by the renderer via invoke (robust to
+// renderer reloads, unlike a captured event.sender.send).
+let exportFraction = 0
 
 /** ipcMain.handle wrapper: every handler failure lands in the log with its channel. */
 function handleIpc(channel: string, fn: (event: IpcMainInvokeEvent, ...args: never[]) => Promise<unknown>): void {
@@ -139,12 +142,13 @@ app.whenReady().then(async () => {
     if (canceled || !outPath) return null
 
     exportAbort = new AbortController()
+    exportFraction = 0
     log('info', 'export', `start: ${videoPath} → ${outPath} (${ranges.length} ranges)`)
     try {
       await exportVideo(videoPath, ranges, outPath, {
         signal: exportAbort.signal,
         onProgress: (fraction) => {
-          if (!event.sender.isDestroyed()) event.sender.send(IPC.exportProgress, fraction)
+          exportFraction = fraction
         }
       })
       return { outPath }
@@ -155,6 +159,8 @@ app.whenReady().then(async () => {
       exportAbort = null
     }
   })
+
+  handleIpc(IPC.exportPoll, async () => exportFraction)
 
   handleIpc(IPC.exportCancel, async () => {
     exportAbort?.abort()
