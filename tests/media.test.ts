@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, test } from 'vitest'
 import { mkdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { extractAudio, ffprobeJson, probeVideo } from '../src/main/media'
+import { computePeaks, ensurePreviewProxy, extractAudio, ffprobeJson, probeVideo } from '../src/main/media'
 import { runTool } from '../src/main/ffmpeg'
 
 const tmp = fileURLToPath(new URL('.tmp', import.meta.url))
@@ -64,4 +64,47 @@ describe('extractAudio', () => {
     expect(second.audioPath).toBe(first.audioPath)
     expect(second.sizeBytes).toBe(first.sizeBytes)
   })
+})
+
+describe('computePeaks', () => {
+  test('produces normalized non-silent peaks for a sine wave', async () => {
+    const cacheDir = join(tmp, 'cache')
+    const { audioPath } = await extractAudio(sample, cacheDir)
+    const result = await computePeaks(audioPath)
+    expect(result.duration).toBeGreaterThan(1.8)
+    expect(result.duration).toBeLessThan(2.3)
+    expect(result.peaks.length).toBeGreaterThan(100)
+    const max = Math.max(...result.peaks)
+    expect(max).toBeGreaterThan(0.1) // sine is audible
+    expect(max).toBeLessThanOrEqual(1)
+  })
+})
+
+describe('ensurePreviewProxy', () => {
+  test('re-encodes an HEVC source to a playable H.264 proxy', async () => {
+    const hevcSample = join(tmp, 'sample-hevc.mp4')
+    await runTool('ffmpeg', [
+      '-y',
+      '-f', 'lavfi', '-i', 'testsrc=duration=1:size=320x640:rate=30',
+      '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1',
+      '-c:v', 'libx265', '-pix_fmt', 'yuv420p', '-tag:v', 'hvc1',
+      '-c:a', 'aac',
+      '-shortest',
+      hevcSample
+    ])
+    expect((await probeVideo(hevcSample)).needsProxy).toBe(true)
+
+    const fractions: number[] = []
+    const { proxyPath } = await ensurePreviewProxy(hevcSample, join(tmp, 'cache'), (f) => fractions.push(f))
+    const proxyInfo = await probeVideo(proxyPath)
+    expect(proxyInfo.videoCodec).toBe('h264')
+    expect(proxyInfo.needsProxy).toBe(false)
+    expect(proxyInfo.height).toBeLessThanOrEqual(540)
+
+    // cached second call: same path, no new progress events
+    const before = fractions.length
+    const again = await ensurePreviewProxy(hevcSample, join(tmp, 'cache'), (f) => fractions.push(f))
+    expect(again.proxyPath).toBe(proxyPath)
+    expect(fractions.length).toBe(before)
+  }, 60_000)
 })

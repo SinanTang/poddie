@@ -12,7 +12,14 @@ const api: PoddieApi = {
     const listener = (_event: IpcRendererEvent, p: TranscribeProgress): void => cb(p)
     ipcRenderer.on(IPC.transcribeProgress, listener)
     return () => ipcRenderer.removeListener(IPC.transcribeProgress, listener)
-  }
+  },
+  ensureProxy: (videoPath) => ipcRenderer.invoke(IPC.proxyEnsure, videoPath),
+  onProxyProgress: (cb) => {
+    const listener = (_event: IpcRendererEvent, fraction: number): void => cb(fraction)
+    ipcRenderer.on(IPC.proxyProgress, listener)
+    return () => ipcRenderer.removeListener(IPC.proxyProgress, listener)
+  },
+  getPeaks: (videoPath) => ipcRenderer.invoke(IPC.audioPeaks, videoPath)
 }
 
 contextBridge.exposeInMainWorld('poddie', api)

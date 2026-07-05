@@ -55,11 +55,14 @@ interface Gap  { after: number /* word id */; start: number; end: number; remove
 - [x] .env support: loadEnvFile() in config.ts, called at app startup (env var still wins over stored config key)
 
 ### Phase 3: Aligned Viewer (read-only)
-**Status**: pending
-- [ ] Video player + transcript pane, words highlighted as playback progresses (binary search on time)
-- [ ] Click word → seek video to word.start
-- [ ] Search box: match words/phrases, highlight hits, Enter/arrows cycle + seek
-- [ ] Waveform (wavesurfer + precomputed peaks) synced to player position
+**Status**: code complete — pending user visual check
+- [x] Video player + transcript pane, active word highlighted via rAF + binary search; paragraph-memoized rendering (9k tokens); CJK-aware token joining (shared/cjk.ts); follow-playback autoscroll (middle-band); paragraph timestamps
+- [x] Click word → seek video (also paragraph time labels)
+- [x] Search: CJK cross-token + multi-word EN + mixed queries via offset-indexed concat text (lib/transcript.ts); ⌘F focus, Enter/Shift+Enter cycle, hit + active-hit highlights, auto-seek on navigate; capped at 500 matches
+- [x] Waveform: wavesurfer 7 bound to the <video> element (media option) with main-process precomputed peaks (ffmpeg s16le decode → 4000 max-abs buckets, cached JSON) — no renderer audio decode
+- [x] HEVC proxy: ensurePreviewProxy (h264_videotoolbox 540p → libx264 fallback), -progress reporting, cache-keyed like audio; UI shows progress then swaps player src; export will still cut the ORIGINAL
+- [x] Keyboard: space play/pause, ←/→ ±3 s, ⌘F search
+- [ ] User visual check of viewer on real footage (proxy pre-warmed in background)
 
 ### Phase 4: Editing (the core)
 **Status**: pending

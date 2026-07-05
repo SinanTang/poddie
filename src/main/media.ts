@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto'
-import { mkdir, rename, stat } from 'node:fs/promises'
+import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { runTool } from './ffmpeg'
-import type { AudioExtractResult, VideoInfo } from '../shared/types'
+import { runTool, runToolBuffer, runToolProgress } from './ffmpeg'
+import type { AudioExtractResult, PeaksResult, VideoInfo } from '../shared/types'
 
 interface FfprobeStream {
   codec_type?: string
@@ -60,6 +60,10 @@ export async function probeVideo(path: string): Promise<VideoInfo> {
   }
 }
 
+function cacheKeyFor(videoPath: string, source: { mtimeMs: number; size: number }): string {
+  return createHash('sha1').update(`${videoPath}:${source.mtimeMs}:${source.size}`).digest('hex').slice(0, 16)
+}
+
 /**
  * Extract mono 16 kHz 64 kbps m4a for Whisper. Cached by (path, mtime, size)
  * so re-opening the same video is instant. Writes to a .part file first so a
@@ -68,11 +72,7 @@ export async function probeVideo(path: string): Promise<VideoInfo> {
 export async function extractAudio(videoPath: string, cacheDir: string): Promise<AudioExtractResult> {
   await mkdir(cacheDir, { recursive: true })
   const source = await stat(videoPath)
-  const key = createHash('sha1')
-    .update(`${videoPath}:${source.mtimeMs}:${source.size}`)
-    .digest('hex')
-    .slice(0, 16)
-  const audioPath = join(cacheDir, `${key}.m4a`)
+  const audioPath = join(cacheDir, `${cacheKeyFor(videoPath, source)}.m4a`)
 
   const cached = await stat(audioPath).catch(() => null)
   if (cached) return { audioPath, sizeBytes: cached.size }
@@ -82,4 +82,84 @@ export async function extractAudio(videoPath: string, cacheDir: string): Promise
   await rename(partPath, audioPath)
   const out = await stat(audioPath)
   return { audioPath, sizeBytes: out.size }
+}
+
+/**
+ * Create (or return the cached) H.264 preview proxy for codecs Chromium can't
+ * decode (iPhone HEVC). 540px on the short side is plenty for preview; export
+ * always cuts the original. Tries the hardware encoder first, falls back to
+ * libx264 if VideoToolbox rejects the input.
+ */
+export async function ensurePreviewProxy(
+  videoPath: string,
+  cacheDir: string,
+  onProgress: (fraction: number) => void
+): Promise<{ proxyPath: string }> {
+  await mkdir(cacheDir, { recursive: true })
+  const source = await stat(videoPath)
+  const proxyPath = join(cacheDir, `${cacheKeyFor(videoPath, source)}.proxy.mp4`)
+  if (await stat(proxyPath).catch(() => null)) return { proxyPath }
+
+  const durationSec = Number((await ffprobeJson(videoPath)).format?.duration ?? 0)
+  const partPath = `${proxyPath}.part.mp4`
+  const argsFor = (encoder: string[]): string[] => [
+    '-y',
+    '-i', videoPath,
+    '-vf', 'scale=-2:540',
+    ...encoder,
+    '-c:a', 'aac',
+    '-b:a', '96k',
+    '-movflags', '+faststart',
+    partPath
+  ]
+  try {
+    await runToolProgress('ffmpeg', argsFor(['-c:v', 'h264_videotoolbox', '-b:v', '1500k']), durationSec, onProgress)
+  } catch {
+    await runToolProgress('ffmpeg', argsFor(['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '26']), durationSec, onProgress)
+  }
+  await rename(partPath, proxyPath)
+  return { proxyPath }
+}
+
+const PEAK_BUCKETS = 4000
+const PEAKS_SAMPLE_RATE = 8000
+
+/**
+ * Waveform peaks (max-abs per bucket, normalized 0..1) from the extracted
+ * audio — precomputed so wavesurfer never has to decode an hour of audio in
+ * the renderer. Cached as JSON beside the audio cache entry.
+ */
+export async function computePeaks(audioPath: string): Promise<PeaksResult> {
+  const peaksPath = `${audioPath}.peaks.json`
+  const cached = await readFile(peaksPath, 'utf8').catch(() => null)
+  if (cached) return JSON.parse(cached) as PeaksResult
+
+  const raw = await runToolBuffer('ffmpeg', [
+    '-v', 'error',
+    '-i', audioPath,
+    '-ac', '1',
+    '-ar', String(PEAKS_SAMPLE_RATE),
+    '-f', 's16le',
+    '-'
+  ])
+  // copy to an aligned buffer — Buffer slices from the pool can be odd-offset
+  const aligned = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.length - (raw.length % 2))
+  const samples = new Int16Array(aligned)
+  if (samples.length === 0) throw new Error(`No audio samples decoded from ${audioPath}`)
+
+  const bucketSize = Math.max(1, Math.floor(samples.length / PEAK_BUCKETS))
+  const peaks: number[] = []
+  for (let b = 0; b < samples.length; b += bucketSize) {
+    let max = 0
+    const end = Math.min(b + bucketSize, samples.length)
+    for (let i = b; i < end; i++) {
+      const abs = Math.abs(samples[i])
+      if (abs > max) max = abs
+    }
+    peaks.push(Math.round((max / 32768) * 1000) / 1000)
+  }
+
+  const result: PeaksResult = { peaks, duration: samples.length / PEAKS_SAMPLE_RATE }
+  await writeFile(peaksPath, JSON.stringify(result))
+  return result
 }

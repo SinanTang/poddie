@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
@@ -41,4 +41,49 @@ export async function runTool(tool: Tool, args: string[]): Promise<{ stdout: str
     const detail = (e.stderr ?? e.message).slice(-2000)
     throw new Error(`${tool} failed (args: ${args.join(' ')}):\n${detail}`)
   }
+}
+
+/** Like runTool but returns raw stdout bytes (e.g. PCM decode for peaks). */
+export async function runToolBuffer(tool: Tool, args: string[]): Promise<Buffer> {
+  const bin = await resolveTool(tool)
+  try {
+    const { stdout } = await execFileAsync(bin, args, { encoding: 'buffer', maxBuffer: 512 * 1024 * 1024 })
+    return stdout
+  } catch (err) {
+    const e = err as Error & { stderr?: Buffer }
+    const detail = (e.stderr?.toString() ?? e.message).slice(-2000)
+    throw new Error(`${tool} failed (args: ${args.join(' ')}):\n${detail}`)
+  }
+}
+
+/**
+ * Run ffmpeg with `-progress` streaming, reporting completion as a fraction of
+ * `durationSec`. For long re-encodes (preview proxy, export).
+ */
+export async function runToolProgress(
+  tool: Tool,
+  args: string[],
+  durationSec: number,
+  onProgress: (fraction: number) => void
+): Promise<void> {
+  const bin = await resolveTool(tool)
+  return new Promise((resolve, reject) => {
+    // -progress/-nostats are global options, so prepending is safe
+    const child = spawn(bin, ['-progress', 'pipe:1', '-nostats', ...args])
+    let stderrTail = ''
+    child.stderr.on('data', (d: Buffer) => {
+      stderrTail = (stderrTail + d.toString()).slice(-2000)
+    })
+    child.stdout.on('data', (d: Buffer) => {
+      for (const line of d.toString().split('\n')) {
+        const m = line.match(/^out_time_us=(\d+)/)
+        if (m && durationSec > 0) onProgress(Math.min(1, Number(m[1]) / 1e6 / durationSec))
+      }
+    })
+    child.on('error', reject)
+    child.on('close', (code) => {
+      if (code === 0) resolve()
+      else reject(new Error(`${tool} exited with code ${code}:\n${stderrTail}`))
+    })
+  })
 }

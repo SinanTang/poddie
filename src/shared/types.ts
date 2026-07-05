@@ -65,6 +65,12 @@ export interface ApiKeyStatus {
   source: 'env' | 'config' | null
 }
 
+export interface PeaksResult {
+  /** Max-abs amplitude per bucket, normalized 0..1. */
+  peaks: number[]
+  duration: number
+}
+
 export const IPC = {
   selectVideo: 'video:select',
   extractAudio: 'audio:extract',
@@ -72,7 +78,10 @@ export const IPC = {
   apiKeySet: 'apiKey:set',
   projectLoad: 'project:load',
   transcribeStart: 'transcribe:start',
-  transcribeProgress: 'transcribe:progress'
+  transcribeProgress: 'transcribe:progress',
+  proxyEnsure: 'proxy:ensure',
+  proxyProgress: 'proxy:progress',
+  audioPeaks: 'audio:peaks'
 } as const
 
 /** The API the preload script exposes to the renderer as `window.poddie`. */
@@ -86,4 +95,8 @@ export interface PoddieApi {
   transcribe(videoPath: string): Promise<Project | null>
   /** Subscribe to transcription progress; returns an unsubscribe function. */
   onTranscribeProgress(cb: (p: TranscribeProgress) => void): () => void
+  /** Create or fetch the cached H.264 preview proxy (for HEVC sources). */
+  ensureProxy(videoPath: string): Promise<{ proxyPath: string }>
+  onProxyProgress(cb: (fraction: number) => void): () => void
+  getPeaks(videoPath: string): Promise<PeaksResult>
 }

@@ -16,6 +16,20 @@
   (brew reinstall) — details in task_plan errors table
 - User added footage/IMG_0470.MOV (real iPhone clip) + gitignore entry
 
+## Session 2026-07-05 (Phase 3)
+- Full transcript exists: 9,021 tokens / 1,297 segments / chinese / $0.27; first
+  line "OK大家好…" confirms MIXED zh+en content
+- New: shared/cjk.ts (needsSpaceBetween/joinTokens), renderer lib/transcript.ts
+  (SearchIndex w/ char-offset maps, findMatches, findWordAtTime, buildParagraphs
+  w/ 50-word min merge), components/ (TranscriptView w/ memoized ParagraphView,
+  SearchBar, Waveform), App.tsx 3-pane layout rewrite, app.css rewrite
+- ffmpeg.ts: +runToolBuffer (PCM), +runToolProgress (spawn + -progress parse)
+- media.ts: +ensurePreviewProxy (videotoolbox→x264 fallback), +computePeaks
+  (8 kHz s16le → 4000 buckets, JSON-cached)
+- Tests 40/40 ✅ typecheck ✅ lint ✅ (incl. real HEVC→proxy round-trip, CJK
+  search cases from the actual transcript)
+- Pre-warmed 44-min proxy into app cache (background ffmpeg, key 8eae1de9d0de2961)
+
 ## Test results
 - 2026-07-05: `npm run typecheck` ✅  `npm run lint` ✅  `npm test` ✅ 4/4
   (probe metadata, no-video-stream rejection, mono-16kHz extraction, cache hit)

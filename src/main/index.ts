@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { extractAudio, ffprobeJson, probeVideo } from './media'
+import { computePeaks, ensurePreviewProxy, extractAudio, ffprobeJson, probeVideo } from './media'
 import { getApiKey, getApiKeyStatus, loadEnvFile, setApiKey } from './config'
 import { loadProject } from './project'
 import { transcribeVideo } from './transcribe'
@@ -53,6 +53,17 @@ app.whenReady().then(() => {
 
   ipcMain.handle(IPC.extractAudio, async (_event, videoPath: string) => {
     return extractAudio(videoPath, join(app.getPath('userData'), 'cache'))
+  })
+
+  ipcMain.handle(IPC.proxyEnsure, async (event, videoPath: string) => {
+    return ensurePreviewProxy(videoPath, join(app.getPath('userData'), 'cache'), (fraction) => {
+      if (!event.sender.isDestroyed()) event.sender.send(IPC.proxyProgress, fraction)
+    })
+  })
+
+  ipcMain.handle(IPC.audioPeaks, async (_event, videoPath: string) => {
+    const { audioPath } = await extractAudio(videoPath, join(app.getPath('userData'), 'cache'))
+    return computePeaks(audioPath)
   })
 
   ipcMain.handle(IPC.apiKeyStatus, async () => getApiKeyStatus(app.getPath('userData')))
