@@ -71,7 +71,14 @@ export interface PeaksResult {
   duration: number
 }
 
+export interface AppInfo {
+  logPath: string
+  /** Prefix for media URLs: `${mediaBaseUrl}/${encodeURIComponent(absPath)}` */
+  mediaBaseUrl: string
+}
+
 export const IPC = {
+  appInfo: 'app:info',
   selectVideo: 'video:select',
   extractAudio: 'audio:extract',
   apiKeyStatus: 'apiKey:status',
@@ -86,6 +93,7 @@ export const IPC = {
 
 /** The API the preload script exposes to the renderer as `window.poddie`. */
 export interface PoddieApi {
+  getAppInfo(): Promise<AppInfo>
   selectVideo(): Promise<VideoInfo | null>
   extractAudio(videoPath: string): Promise<AudioExtractResult>
   getApiKeyStatus(): Promise<ApiKeyStatus>

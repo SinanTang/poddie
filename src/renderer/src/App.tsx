@@ -4,11 +4,7 @@ import { buildSearchIndex, findMatches } from './lib/transcript'
 import { SearchBar } from './components/SearchBar'
 import { TranscriptView } from './components/TranscriptView'
 import { Waveform } from './components/Waveform'
-import type { ApiKeyStatus, PeaksResult, Project, TranscribeProgress, VideoInfo } from '../../shared/types'
-
-function mediaUrl(path: string): string {
-  return `media://${path.split('/').map(encodeURIComponent).join('/')}`
-}
+import type { ApiKeyStatus, AppInfo, PeaksResult, Project, TranscribeProgress, VideoInfo } from '../../shared/types'
 
 function ApiKeyBar({ status, onSaved }: { status: ApiKeyStatus; onSaved: (s: ApiKeyStatus) => void }): React.JSX.Element {
   const [draft, setDraft] = useState('')
@@ -47,6 +43,7 @@ function ApiKeyBar({ status, onSaved }: { status: ApiKeyStatus; onSaved: (s: Api
 type ProxyState = { status: 'none' | 'preparing' | 'ready'; path: string | null; fraction: number }
 
 export default function App(): React.JSX.Element {
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [video, setVideo] = useState<VideoInfo | null>(null)
   const [project, setProject] = useState<Project | null>(null)
   const [keyStatus, setKeyStatus] = useState<ApiKeyStatus | null>(null)
@@ -60,6 +57,7 @@ export default function App(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    window.poddie.getAppInfo().then(setAppInfo).catch(() => setAppInfo(null))
     window.poddie.getApiKeyStatus().then(setKeyStatus).catch(() => setKeyStatus(null))
     const offTranscribe = window.poddie.onTranscribeProgress(setTProgress)
     const offProxy = window.poddie.onProxyProgress((fraction) =>
@@ -160,7 +158,8 @@ export default function App(): React.JSX.Element {
     return () => window.removeEventListener('keydown', onKey)
   }, [videoEl])
 
-  const playerSrc = video ? (video.needsProxy ? proxy.path : video.path) : null
+  const playerPath = video ? (video.needsProxy ? proxy.path : video.path) : null
+  const playerSrc = playerPath && appInfo ? `${appInfo.mediaBaseUrl}/${encodeURIComponent(playerPath)}` : null
   const costEstimate = video ? whisperCostUsd(video.durationSec).toFixed(2) : null
 
   return (
@@ -183,7 +182,12 @@ export default function App(): React.JSX.Element {
         </button>
       </header>
 
-      {error && <div className="error">{error}</div>}
+      {error && (
+        <div className="error">
+          {error}
+          {appInfo && <div className="error-hint">Full details: {appInfo.logPath}</div>}
+        </div>
+      )}
 
       {video ? (
         <>
@@ -215,7 +219,7 @@ export default function App(): React.JSX.Element {
 
             <aside className="video-pane">
               {playerSrc ? (
-                <video ref={setVideoEl} key={playerSrc} className="player" controls src={mediaUrl(playerSrc)} />
+                <video ref={setVideoEl} key={playerSrc} className="player" controls src={playerSrc} />
               ) : (
                 <div className="proxy-progress">
                   <p>Preparing preview…</p>

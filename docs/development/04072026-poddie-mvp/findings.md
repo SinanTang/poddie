@@ -82,6 +82,26 @@
 - Pipeline timing: 2-min slice → ~10 s wall clock total (extract + upload + API).
   Full 44-min file ≈ estimate 2–4 min, single chunk.
 
+## Platform lesson: Electron protocol.handle can't serve seekable media (2026-07-05)
+- Verified with a minimal headless repro (scratchpad/repro/main{,2,3}.js pattern:
+  hidden BrowserWindow + muted <video> + event/range logging, ~10 s per run):
+  - streamed 206 body → PIPELINE_ERROR_READ on mid-file seek
+  - buffered clamped 206 → Chromium stops issuing range requests; seek → EOF
+  - localhost HTTP server → everything works natively
+- Production shape: media-server.ts — 127.0.0.1, ephemeral port, random token
+  in path, standard 200/206/416/404/403, createReadStream piping (backpressure
+  and abort handled by node http). Renderer gets base URL via app:info IPC.
+- The repro harness pattern is the debugging tool of choice for any future
+  media-pipeline weirdness — keep using it before theorizing.
+
+## Debuggability (added 2026-07-05, user request)
+- Main-process logger (logger.ts): human-readable lines → console + 
+  ~/Library/Application Support/poddie/logs/poddie.log (5 MB startup rotation)
+- Logged: session start, every IPC failure (with channel), ffmpeg failures with
+  stderr tail, long ffmpeg runs, transcribe stages, media server requests/errors,
+  uncaught exceptions/rejections
+- Renderer error banner shows the log path under every error message
+
 ## Environment gotchas (this Mac)
 - `EPERM uv_cwd`: third-party binaries (node, python) were denied getcwd() inside
   ~/Documents while file I/O by absolute path worked. User-side macOS permission

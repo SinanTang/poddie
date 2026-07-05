@@ -1,21 +1,30 @@
-import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { computePeaks, ensurePreviewProxy, extractAudio, ffprobeJson, probeVideo } from './media'
+import { startMediaServer, type MediaServer } from './media-server'
 import { getApiKey, getApiKeyStatus, loadEnvFile, setApiKey } from './config'
 import { loadProject } from './project'
 import { transcribeVideo } from './transcribe'
+import { getLogPath, initLogger, log, logError } from './logger'
 import { fmtDuration, whisperCostUsd } from '../shared/format'
 import { IPC, type TranscribeProgress } from '../shared/types'
 
 // In dev, app path is the project root — picks up the user's .env (OPENAI_API_KEY)
 loadEnvFile(join(app.getAppPath(), '.env'))
 
-// The renderer loads local video files via media:// (file:// is blocked from
-// an http:// dev-server origin). stream + supportFetchAPI let <video> seek.
-protocol.registerSchemesAsPrivileged([
-  { scheme: 'media', privileges: { supportFetchAPI: true, stream: true, bypassCSP: true } }
-])
+let mediaServer: MediaServer | null = null
+
+/** ipcMain.handle wrapper: every handler failure lands in the log with its channel. */
+function handleIpc(channel: string, fn: (event: IpcMainInvokeEvent, ...args: never[]) => Promise<unknown>): void {
+  ipcMain.handle(channel, async (event, ...args) => {
+    try {
+      return await fn(event, ...(args as never[]))
+    } catch (err) {
+      logError(`ipc:${channel}`, err)
+      throw err
+    }
+  })
+}
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -35,44 +44,46 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
-  protocol.handle('media', (request) => {
-    const { pathname } = new URL(request.url)
-    const filePath = decodeURIComponent(pathname)
-    return net.fetch(pathToFileURL(filePath).toString(), { headers: request.headers })
-  })
+app.whenReady().then(async () => {
+  initLogger(join(app.getPath('userData'), 'logs'))
+  process.on('uncaughtException', (err) => logError('uncaught', err))
+  process.on('unhandledRejection', (reason) => logError('unhandled-rejection', reason))
 
-  ipcMain.handle(IPC.selectVideo, async () => {
+  mediaServer = await startMediaServer()
+  const cacheDir = join(app.getPath('userData'), 'cache')
+
+  handleIpc(IPC.appInfo, async () => ({ logPath: getLogPath(), mediaBaseUrl: mediaServer!.baseUrl }))
+
+  handleIpc(IPC.selectVideo, async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog({
       properties: ['openFile'],
       filters: [{ name: 'Videos', extensions: ['mov', 'mp4', 'm4v'] }]
     })
     if (canceled || filePaths.length === 0) return null
+    log('info', 'video', `open ${filePaths[0]}`)
     return probeVideo(filePaths[0])
   })
 
-  ipcMain.handle(IPC.extractAudio, async (_event, videoPath: string) => {
-    return extractAudio(videoPath, join(app.getPath('userData'), 'cache'))
-  })
+  handleIpc(IPC.extractAudio, async (_event, videoPath: string) => extractAudio(videoPath, cacheDir))
 
-  ipcMain.handle(IPC.proxyEnsure, async (event, videoPath: string) => {
-    return ensurePreviewProxy(videoPath, join(app.getPath('userData'), 'cache'), (fraction) => {
+  handleIpc(IPC.proxyEnsure, async (event, videoPath: string) => {
+    return ensurePreviewProxy(videoPath, cacheDir, (fraction) => {
       if (!event.sender.isDestroyed()) event.sender.send(IPC.proxyProgress, fraction)
     })
   })
 
-  ipcMain.handle(IPC.audioPeaks, async (_event, videoPath: string) => {
-    const { audioPath } = await extractAudio(videoPath, join(app.getPath('userData'), 'cache'))
+  handleIpc(IPC.audioPeaks, async (_event, videoPath: string) => {
+    const { audioPath } = await extractAudio(videoPath, cacheDir)
     return computePeaks(audioPath)
   })
 
-  ipcMain.handle(IPC.apiKeyStatus, async () => getApiKeyStatus(app.getPath('userData')))
+  handleIpc(IPC.apiKeyStatus, async () => getApiKeyStatus(app.getPath('userData')))
 
-  ipcMain.handle(IPC.apiKeySet, async (_event, key: string) => setApiKey(app.getPath('userData'), key))
+  handleIpc(IPC.apiKeySet, async (_event, key: string) => setApiKey(app.getPath('userData'), key))
 
-  ipcMain.handle(IPC.projectLoad, async (_event, videoPath: string) => loadProject(videoPath))
+  handleIpc(IPC.projectLoad, async (_event, videoPath: string) => loadProject(videoPath))
 
-  ipcMain.handle(IPC.transcribeStart, async (event, videoPath: string) => {
+  handleIpc(IPC.transcribeStart, async (event, videoPath: string) => {
     const { key } = await getApiKey(app.getPath('userData'))
     if (!key) throw new Error('No OpenAI API key configured — set OPENAI_API_KEY or save a key in the app')
 
@@ -92,10 +103,12 @@ app.whenReady().then(() => {
     })
     if (response !== 1) return null
 
+    log('info', 'transcribe', `start ${videoPath}`)
     return transcribeVideo(videoPath, {
-      cacheDir: join(app.getPath('userData'), 'cache'),
+      cacheDir,
       apiKey: key,
       onProgress: (p: TranscribeProgress) => {
+        log('info', 'transcribe', `${p.stage} ${Math.round(p.fraction * 100)}% ${p.message}`)
         if (!event.sender.isDestroyed()) event.sender.send(IPC.transcribeProgress, p)
       }
     })
@@ -109,5 +122,6 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  mediaServer?.close()
   if (process.platform !== 'darwin') app.quit()
 })

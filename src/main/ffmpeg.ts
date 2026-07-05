@@ -1,5 +1,6 @@
 import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
+import { log } from './logger'
 
 const execFileAsync = promisify(execFile)
 
@@ -39,6 +40,7 @@ export async function runTool(tool: Tool, args: string[]): Promise<{ stdout: str
   } catch (err) {
     const e = err as Error & { stderr?: string }
     const detail = (e.stderr ?? e.message).slice(-2000)
+    log('error', tool, `failed: ${tool} ${args.join(' ')}\n${detail}`)
     throw new Error(`${tool} failed (args: ${args.join(' ')}):\n${detail}`)
   }
 }
@@ -67,6 +69,7 @@ export async function runToolProgress(
   onProgress: (fraction: number) => void
 ): Promise<void> {
   const bin = await resolveTool(tool)
+  log('info', tool, `long run: ${tool} ${args.join(' ')}`)
   return new Promise((resolve, reject) => {
     // -progress/-nostats are global options, so prepending is safe
     const child = spawn(bin, ['-progress', 'pipe:1', '-nostats', ...args])
@@ -82,8 +85,12 @@ export async function runToolProgress(
     })
     child.on('error', reject)
     child.on('close', (code) => {
-      if (code === 0) resolve()
-      else reject(new Error(`${tool} exited with code ${code}:\n${stderrTail}`))
+      if (code === 0) {
+        resolve()
+      } else {
+        log('error', tool, `exited ${code}: ${tool} ${args.join(' ')}\n${stderrTail}`)
+        reject(new Error(`${tool} exited with code ${code}:\n${stderrTail}`))
+      }
     })
   })
 }

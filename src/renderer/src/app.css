@@ -254,6 +254,13 @@ input[type='search'] {
   flex-shrink: 0;
 }
 
+.error-hint {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #fca5a5;
+  user-select: text;
+}
+
 .warning {
   background: #78350f;
   border-radius: 6px;

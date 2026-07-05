@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { IPC, type PoddieApi, type TranscribeProgress } from '../shared/types'
 
 const api: PoddieApi = {
+  getAppInfo: () => ipcRenderer.invoke(IPC.appInfo),
   selectVideo: () => ipcRenderer.invoke(IPC.selectVideo),
   extractAudio: (videoPath) => ipcRenderer.invoke(IPC.extractAudio, videoPath),
   getApiKeyStatus: () => ipcRenderer.invoke(IPC.apiKeyStatus),
