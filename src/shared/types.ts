@@ -91,7 +91,11 @@ export const IPC = {
   transcribeProgress: 'transcribe:progress',
   proxyEnsure: 'proxy:ensure',
   proxyProgress: 'proxy:progress',
-  audioPeaks: 'audio:peaks'
+  audioPeaks: 'audio:peaks',
+  exportStart: 'export:start',
+  exportCancel: 'export:cancel',
+  exportProgress: 'export:progress',
+  exportReveal: 'export:reveal'
 } as const
 
 /** The API the preload script exposes to the renderer as `window.poddie`. */
@@ -111,4 +115,9 @@ export interface PoddieApi {
   ensureProxy(videoPath: string): Promise<{ proxyPath: string }>
   onProxyProgress(cb: (fraction: number) => void): () => void
   getPeaks(videoPath: string): Promise<PeaksResult>
+  /** Save dialog + cut/concat/re-encode. Null when the user cancels (dialog or mid-export). */
+  exportVideo(videoPath: string, ranges: import('./edit').TimeRange[]): Promise<{ outPath: string } | null>
+  cancelExport(): Promise<void>
+  onExportProgress(cb: (fraction: number) => void): () => void
+  revealFile(path: string): Promise<void>
 }

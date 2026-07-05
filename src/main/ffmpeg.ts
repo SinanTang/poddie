@@ -60,19 +60,21 @@ export async function runToolBuffer(tool: Tool, args: string[]): Promise<Buffer>
 
 /**
  * Run ffmpeg with `-progress` streaming, reporting completion as a fraction of
- * `durationSec`. For long re-encodes (preview proxy, export).
+ * `durationSec`. For long re-encodes (preview proxy, export). An aborted
+ * signal kills the child and rejects with an AbortError.
  */
 export async function runToolProgress(
   tool: Tool,
   args: string[],
   durationSec: number,
-  onProgress: (fraction: number) => void
+  onProgress: (fraction: number) => void,
+  signal?: AbortSignal
 ): Promise<void> {
   const bin = await resolveTool(tool)
   log('info', tool, `long run: ${tool} ${args.join(' ')}`)
   return new Promise((resolve, reject) => {
     // -progress/-nostats are global options, so prepending is safe
-    const child = spawn(bin, ['-progress', 'pipe:1', '-nostats', ...args])
+    const child = spawn(bin, ['-progress', 'pipe:1', '-nostats', ...args], { signal })
     let stderrTail = ''
     child.stderr.on('data', (d: Buffer) => {
       stderrTail = (stderrTail + d.toString()).slice(-2000)

@@ -80,6 +80,8 @@ export default function App(): React.JSX.Element {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ state: 'clean' })
+  const [exporting, setExporting] = useState<{ fraction: number } | null>(null)
+  const [exportResult, setExportResult] = useState<string | null>(null)
   const dirtyRef = useRef(false)
 
   useEffect(() => {
@@ -89,9 +91,13 @@ export default function App(): React.JSX.Element {
     const offProxy = window.poddie.onProxyProgress((fraction) =>
       setProxy((p) => (p.status === 'preparing' ? { ...p, fraction } : p))
     )
+    const offExport = window.poddie.onExportProgress((fraction) =>
+      setExporting((e) => (e ? { fraction } : e))
+    )
     return () => {
       offTranscribe()
       offProxy()
+      offExport()
     }
   }, [])
 
@@ -260,6 +266,21 @@ export default function App(): React.JSX.Element {
     }
   }
 
+  async function doExport(): Promise<void> {
+    if (!video || kept.length === 0) return
+    setError(null)
+    setExportResult(null)
+    setExporting({ fraction: 0 })
+    try {
+      const result = await window.poddie.exportVideo(video.path, kept)
+      if (result) setExportResult(result.outPath) // null = dialog or mid-export cancel
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setExporting(null)
+    }
+  }
+
   const transcript = project?.transcript ?? null
   const searchIndex = useMemo(() => (items ? buildSearchIndex(items) : null), [items])
   const matches = useMemo(() => (searchIndex ? findMatches(searchIndex, query) : []), [searchIndex, query])
@@ -400,8 +421,35 @@ export default function App(): React.JSX.Element {
                   </div>
                 )}
               </div>
+              {items && (
+                <div className="export-block">
+                  {exporting ? (
+                    <>
+                      <span className="progress">
+                        <progress value={exporting.fraction} max={1} /> Exporting…{' '}
+                        {Math.round(exporting.fraction * 100)}%
+                      </span>
+                      <button className="ghost small" onClick={() => void window.poddie.cancelExport()}>
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <button onClick={doExport} disabled={kept.length === 0}>
+                      Export {fmtDuration(keptSec)} video…
+                    </button>
+                  )}
+                  {exportResult && (
+                    <div className="export-result">
+                      ✓ Exported
+                      <button className="ghost small" onClick={() => void window.poddie.revealFile(exportResult)}>
+                        Show in Finder
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
               {transcript && (
-                <button className="ghost small" onClick={transcribe} disabled={busy !== null || !keyStatus?.present}>
+                <button className="ghost small" onClick={transcribe} disabled={busy !== null || exporting !== null || !keyStatus?.present}>
                   Re-transcribe…
                 </button>
               )}

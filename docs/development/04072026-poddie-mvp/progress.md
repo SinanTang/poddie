@@ -47,6 +47,22 @@
   hard" list: empty edit, everything removed, adjacent merge, micro-holes,
   toggle semantics, undo reversibility)
 
+## Session 2026-07-05 (Phase 4 follow-ups + Phase 5)
+- Autosave made visible (user report "can't see progress saved"): SaveStatus
+  state machine (clean/pending/saving/saved/failed) + toolbar indicator with
+  timestamp; verified saves were already landing via log + project json
+- Explained edit-merge model to user (no operation log — per-token boolean
+  snapshot, last write wins; ranges coalesce at read time)
+- Phase 5 export shipped: export.ts (buildExportArgs pure + exportVideo with
+  VT→x264 fallback, .part rename, AbortSignal cancel), runToolProgress gained
+  signal param, IPC export:start/cancel/progress/reveal, video-pane UI
+  (progress + Cancel + Show in Finder)
+- Export format Q&A → findings (already-optimal MP4/H.264/AAC/faststart);
+  audio-only export logged as Phase 5.5 candidate
+- Tests 69/69 ✅ typecheck ✅ lint ✅ (export: 4 builder unit tests + real
+  3-cut ffmpeg export w/ A/V sync probe + cancel cleanup)
+- Pending user verification: listen across cut joins on a real full export
+
 ## Test results
 - 2026-07-05: `npm run typecheck` ✅  `npm run lint` ✅  `npm test` ✅ 4/4
   (probe metadata, no-video-stream rejection, mono-16kHz extraction, cache hit)

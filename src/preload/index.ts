@@ -21,7 +21,15 @@ const api: PoddieApi = {
     ipcRenderer.on(IPC.proxyProgress, listener)
     return () => ipcRenderer.removeListener(IPC.proxyProgress, listener)
   },
-  getPeaks: (videoPath) => ipcRenderer.invoke(IPC.audioPeaks, videoPath)
+  getPeaks: (videoPath) => ipcRenderer.invoke(IPC.audioPeaks, videoPath),
+  exportVideo: (videoPath, ranges) => ipcRenderer.invoke(IPC.exportStart, videoPath, ranges),
+  cancelExport: () => ipcRenderer.invoke(IPC.exportCancel),
+  onExportProgress: (cb) => {
+    const listener = (_event: IpcRendererEvent, fraction: number): void => cb(fraction)
+    ipcRenderer.on(IPC.exportProgress, listener)
+    return () => ipcRenderer.removeListener(IPC.exportProgress, listener)
+  },
+  revealFile: (path) => ipcRenderer.invoke(IPC.exportReveal, path)
 }
 
 contextBridge.exposeInMainWorld('poddie', api)

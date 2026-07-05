@@ -38,7 +38,7 @@ interface Gap  { after: number /* word id */; start: number; end: number; remove
 ## Phases
 
 ### Phase 1: Scaffold & Media Pipeline
-**Status**: complete (pending user smoke test in UI)
+**Status**: complete 
 - [x] Electron + Vite + React + TS scaffold (electron-vite), strict TS, ESLint
 - [x] Main-process media service: ffprobe metadata, audio extraction (mono 16 kHz m4a); peaks deferred to Phase 3 (try wavesurfer's own decode first, per findings)
 - [x] IPC contract (typed) between main and renderer (src/shared/types.ts)
@@ -55,30 +55,35 @@ interface Gap  { after: number /* word id */; start: number; end: number; remove
 - [x] .env support: loadEnvFile() in config.ts, called at app startup (env var still wins over stored config key)
 
 ### Phase 3: Aligned Viewer (read-only)
-**Status**: code complete — pending user visual check
+**Status**: complete ✅ 
 - [x] Video player + transcript pane, active word highlighted via rAF + binary search; paragraph-memoized rendering (9k tokens); CJK-aware token joining (shared/cjk.ts); follow-playback autoscroll (middle-band); paragraph timestamps
 - [x] Click word → seek video (also paragraph time labels)
 - [x] Search: CJK cross-token + multi-word EN + mixed queries via offset-indexed concat text (lib/transcript.ts); ⌘F focus, Enter/Shift+Enter cycle, hit + active-hit highlights, auto-seek on navigate; capped at 500 matches
 - [x] Waveform: wavesurfer 7 bound to the <video> element (media option) with main-process precomputed peaks (ffmpeg s16le decode → 4000 max-abs buckets, cached JSON) — no renderer audio decode
 - [x] HEVC proxy: ensurePreviewProxy (h264_videotoolbox 540p → libx264 fallback), -progress reporting, cache-keyed like audio; UI shows progress then swaps player src; export will still cut the ORIGINAL
 - [x] Keyboard: space play/pause, ←/→ ±3 s, ⌘F search
-- [ ] User visual check of viewer on real footage (proxy pre-warmed in background)
+- [x] User visual check of viewer on real footage (proxy pre-warmed in background)
 
 ### Phase 4: Editing (the core)
-**Status**: code complete — pending user check
+**Status**: complete ✅ 
 - [x] Select (click-drag / shift-click) → ⌫ removes; ⌫ on fully-removed selection RESTORES (one toggle rule); click still seeks; Esc clears
 - [x] Silence gaps ≥0.35 s rendered as `1.2s` chip tokens, deletable like words (shared/edit.ts: deriveItems — silences ARE items, no special cases)
 - [x] keptRanges = complement of merged removed ranges over [0,duration] (micro-hole absorption, sliver dropping — hard unit-tested); preview controller (rAF) hops cuts during playback, pauses at a cut reaching EOF
 - [x] Waveform: removed ranges shaded red (regions plugin); drag-select on waveform → deletes overlapping items (>50% or >0.05 s overlap)
 - [x] Undo/redo: ItemChange[] stacks, ⌘Z/⇧⌘Z + toolbar buttons; item count never changes so indices stay valid
 - [x] Autosave: debounced 800 ms → project.edit (full items persisted — self-contained, survives derivation changes); "X kept · Y cut" summary in video pane
-- [ ] User check on real footage
+- [x] User check on real footage
 
 ### Phase 5: Export
-**Status**: pending
-- [ ] ffmpeg filter_complex builder from keptRanges (trim + concat, video+audio)
-- [ ] Export dialog: destination, progress bar (parse ffmpeg `-progress`), cancel
-- [ ] Verify A/V sync on a real multi-cut export
+**Status**: code complete — automated A/V check passed; user listen-through of a real export pending
+- [x] ffmpeg builder from keptRanges (export.ts: pure buildExportArgs — n=1 plain input seek, n>1 trim/atrim+setpts+concat graph; audio-less variant; renderer passes LIVE kept ranges so sub-debounce edits are included)
+- [x] Encoding: h264_videotoolbox 10M → libx264 crf18 fallback, aac 192k, yuv420p, +faststart — deliberately the universal SNS/platform ingest format (see findings); exports cut the ORIGINAL file, never the proxy
+- [x] Export dialog (save panel, defaults `<stem>-edited.mp4` beside source), progress bar via -progress parse against kept duration, working Cancel (AbortController → spawn signal), .part-then-rename so failures/cancels leave no fake output, Show-in-Finder on success
+- [x] A/V sync verified automated: 3-cut export of 10 s fixture → duration 4 s ±0.3, h264+aac, |video − audio stream duration| < 0.2 s; cancel test leaves no partial file
+- [ ] User: listen across cut joins on a real 44-min export (several minutes to encode)
+
+### Phase 5.5 (candidate, user-suggested): Audio-only export
+- [ ] "Export audio (.m4a/.mp3)" — same keptRanges, atrim/concat only, no video encode (seconds not minutes); for Apple Podcasts / Spotify RSS feeds. Await user go-ahead.
 
 ### Phase 6: Advanced (if time allows)
 **Status**: pending

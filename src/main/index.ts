@@ -1,5 +1,7 @@
-import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron'
-import { join } from 'node:path'
+import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
+import { basename, dirname, join } from 'node:path'
+import { exportVideo } from './export'
+import type { TimeRange } from '../shared/edit'
 import { computePeaks, ensurePreviewProxy, extractAudio, ffprobeJson, probeVideo } from './media'
 import { startMediaServer, type MediaServer } from './media-server'
 import { getApiKey, getApiKeyStatus, loadEnvFile, setApiKey } from './config'
@@ -14,6 +16,7 @@ import { IPC, type TranscribeProgress } from '../shared/types'
 loadEnvFile(join(app.getAppPath(), '.env'))
 
 let mediaServer: MediaServer | null = null
+let exportAbort: AbortController | null = null
 
 /** ipcMain.handle wrapper: every handler failure lands in the log with its channel. */
 function handleIpc(channel: string, fn: (event: IpcMainInvokeEvent, ...args: never[]) => Promise<unknown>): void {
@@ -121,6 +124,44 @@ app.whenReady().then(async () => {
         if (!event.sender.isDestroyed()) event.sender.send(IPC.transcribeProgress, p)
       }
     })
+  })
+
+  handleIpc(IPC.exportStart, async (event, videoPath: string, ranges: TimeRange[]) => {
+    if (exportAbort) throw new Error('An export is already running')
+    if (!Array.isArray(ranges) || ranges.length === 0) throw new Error('Nothing to export: every range was cut')
+
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const stem = basename(videoPath).replace(/\.[^.]+$/, '')
+    const { canceled, filePath: outPath } = await dialog.showSaveDialog(win!, {
+      defaultPath: join(dirname(videoPath), `${stem}-edited.mp4`),
+      filters: [{ name: 'MP4 Video', extensions: ['mp4'] }]
+    })
+    if (canceled || !outPath) return null
+
+    exportAbort = new AbortController()
+    log('info', 'export', `start: ${videoPath} → ${outPath} (${ranges.length} ranges)`)
+    try {
+      await exportVideo(videoPath, ranges, outPath, {
+        signal: exportAbort.signal,
+        onProgress: (fraction) => {
+          if (!event.sender.isDestroyed()) event.sender.send(IPC.exportProgress, fraction)
+        }
+      })
+      return { outPath }
+    } catch (err) {
+      if (exportAbort.signal.aborted) return null
+      throw err
+    } finally {
+      exportAbort = null
+    }
+  })
+
+  handleIpc(IPC.exportCancel, async () => {
+    exportAbort?.abort()
+  })
+
+  handleIpc(IPC.exportReveal, async (_event, path: string) => {
+    shell.showItemInFolder(path)
   })
 
   createWindow()

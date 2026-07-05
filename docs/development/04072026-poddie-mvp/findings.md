@@ -102,6 +102,17 @@
   uncaught exceptions/rejections
 - Renderer error banner shows the log path under every error message
 
+## Export format rationale (2026-07-05, user asked re: SNS/podcast platforms)
+- MP4 + H.264 (yuv420p) + AAC + `+faststart` = universal ingest format: YouTube,
+  IG/Reels, TikTok, X, Bilibili, 小红书, WeChat Channels, Spotify video all take
+  it natively and transcode on ingest anyway — HEVC buys nothing at upload time
+  (and X has rejected it). 10 Mbps @1080p is inside every platform's rec range.
+- yuv420p is load-bearing: some pipelines/QuickTime choke on other chroma formats.
+- Orientation is the per-platform decision, not codec: this footage displays
+  landscape 1920×1080 (YouTube-shaped); vertical platforms letterbox it.
+- Gap: audio-first podcast feeds (Apple/Spotify RSS) want MP3/M4A — audio-only
+  export offered to user, logged as Phase 5.5 candidate in task_plan.
+
 ## Environment gotchas (this Mac)
 - `EPERM uv_cwd`: third-party binaries (node, python) were denied getcwd() inside
   ~/Documents while file I/O by absolute path worked. User-side macOS permission
