@@ -5,7 +5,9 @@ import {
   deriveItems,
   GAP_MIN_SEC,
   keptRanges,
+  mergeWithPrevChanges,
   removedRanges,
+  textEditChanges,
   toggleRangeChanges,
   type EditItem,
   type ItemChange
@@ -162,6 +164,27 @@ export default function App(): React.JSX.Element {
     [items, applyEdit]
   )
 
+  // In-place text edits change display/caption text only — cut timing and the
+  // export are derived from time + removed, never from text (see shared/edit.ts)
+  const onEditText = useCallback(
+    (index: number, text: string) => {
+      if (items) applyEdit(textEditChanges(items, index, text))
+    },
+    [items, applyEdit]
+  )
+
+  // Returns whether a merge happened (a gap token blocks merging) so the
+  // editor can keep the user's draft instead of silently dropping it.
+  const onMergeWithPrev = useCallback(
+    (index: number, draftText: string): boolean => {
+      if (!items) return false
+      const changes = mergeWithPrevChanges(items, index, draftText)
+      applyEdit(changes)
+      return changes.length > 0
+    },
+    [items, applyEdit]
+  )
+
   // waveform drag-selection deletes every item the span meaningfully overlaps
   const onWaveformSelect = useCallback(
     (start: number, end: number) => {
@@ -171,7 +194,9 @@ export default function App(): React.JSX.Element {
         const item = items[i]
         if (item.removed) continue
         const overlap = Math.min(item.end, end) - Math.max(item.start, start)
-        if (overlap > Math.min(0.05, (item.end - item.start) / 2)) changes.push({ index: i, prev: false, next: true })
+        if (overlap > Math.min(0.05, (item.end - item.start) / 2)) {
+          changes.push({ index: i, prev: { removed: false }, next: { removed: true } })
+        }
       }
       applyEdit(changes)
     },
@@ -384,6 +409,8 @@ export default function App(): React.JSX.Element {
                   matches={matches}
                   activeMatch={activeMatch}
                   onToggleRange={onToggleRange}
+                  onEditText={onEditText}
+                  onMergeWithPrev={onMergeWithPrev}
                   canUndo={(editState?.past.length ?? 0) > 0}
                   canRedo={(editState?.future.length ?? 0) > 0}
                   onUndo={undo}

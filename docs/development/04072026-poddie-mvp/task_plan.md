@@ -84,7 +84,7 @@ interface Gap  { after: number /* word id */; start: number; end: number; remove
 - [x] Progress bar fixed: PUSH→POLL (getExportProgress invoke every 400 ms); robust to renderer reloads — user-confirmed working (see errors table)
 
 ### Phase 5.1: In-place transcript text editing + waveform zoom
-**Status**: pending (planned 2026-07-05, user-requested after testing)
+**Status**: implemented 2026-07-05 — awaiting user verification in the app
 
 Motivation: Whisper mis-splits tokens ("cons ult ing", "D PO firm", CJK char-tokens)
 and drops punctuation; the user needs to clean the transcript for readable captions.
@@ -92,20 +92,20 @@ Separately, at 44 min across ~900 px the waveform is ~3 s/px — too coarse for 
 manual region selection.
 
 **5.1a — In-place text editing (display/caption layer only; NEVER changes cut timing)**
-- [ ] Double-click a word token → inline editable input; Enter/blur commits, Esc cancels. Gap tokens are not editable.
-- [ ] Editing changes `EditItem.text` only. Cut ranges / keptRanges / export are derived from time + `removed`, so text edits have ZERO effect on the video — they exist for readability + Phase 6 captions + search. State this invariant loudly in code.
-- [ ] Fix mis-splits: a "merge with previous" action (e.g. ⌫ at input start, or a small join affordance) concatenates text into one token and blanks the neighbor's display text while KEEPING its time span (audio untouched). Merged token's [start,end] = union, so click-to-seek + caption timing stay sane.
-- [ ] Undo/redo: generalize the change model. Current `ItemChange` only flips the `removed` boolean; add a text-edit variant (index, prevText, nextText) or refactor to a generic field-patch change. Keep the "item count never changes → indices stay valid" invariant (merges blank text, don't delete items).
-- [ ] Persistence: text already lives in `project.edit.items`; debounced autosave covers it. Bump a project `edit.version` if the shape changes so old files still load.
-- [ ] Search index + CJK join already read item text → text edits flow through for free; verify.
-- Risk: don't let a text edit silently shift audio. Test: edit text of a word inside a kept range → export byte-identical to before the text edit.
+- [x] Double-click a word token → inline editable input; Enter/blur commits, Esc cancels (settle-once guard so a blur race can't override Esc; CJK IME composition Enter respected). Gap tokens are not editable.
+- [x] Editing changes `EditItem.text` only — invariant stated loudly in shared/edit.ts (`textEditChanges` doc) and App.tsx.
+- [x] Merge mis-splits: ⌫ at input start merges the in-flight draft into the previous word (`mergeWithPrevChanges`): text concat, merged span = union, neighbor's display text blanked but item + time span kept (audio untouched). Skips already-blanked words (chain merges "cons ult ing" → "consulting"); a gap token BLOCKS merging (never silently join across an audible silence — editor stays open, draft kept).
+- [x] Undo/redo generalized: `ItemChange` is now a reversible field patch `{index, prev: ItemPatch, next: ItemPatch}` (covers removed/text/end in ONE code path — cut, edit, merge are not special cases). Item count never changes → indices in history stay valid.
+- [x] Persistence: `EditState` shape unchanged (items still `{kind,text,start,end,removed}`) → version stays 1, old project files load as-is. History was never persisted, so the ItemChange refactor can't break saved files.
+- [x] Search index + CJK join read item text → edits flow through; blanked words already handled as zero-width tokens (same path as gaps).
+- [x] Invariant test: keptRanges/removedRanges deep-equal before vs after text edits + merges (export args derive only from ranges → byte-identical export). 20 edit tests total.
 
 **5.1b — Waveform zoom for granular selection**
-- [ ] Zoom control: slider + "Fit" button + ⌘/ctrl-scroll to zoom at cursor; horizontal scroll when zoomed. Use wavesurfer 7 `ws.zoom(pxPerSec)`.
-- [ ] Peaks resolution: current peaks = 4000 buckets for the whole file (~1.5 buckets/s at 44 min) — too coarse when zoomed in. Raise precomputed bucket density (target ~10–20 buckets/s; a 44-min file ≈ 26k–53k floats, still a small JSON) OR store peaks at native sample granularity windowed. Measure JSON size + render perf before committing; keep the main-process precompute (never decode an hour of audio in the renderer).
-- [ ] Keep everything working at zoom: video↔waveform time binding, red cut shading, drag-select-to-delete overlap mapping, playhead follow (respect existing Follow toggle → auto-scroll to keep playhead visible).
-- [ ] Optional: a minimap/overview strip (wavesurfer minimap plugin) so the user keeps whole-file context while zoomed. Defer unless it feels necessary.
-- Risk: re-shading cut regions on every edit at high zoom could churn; verify region add/remove perf. Peaks JSON bloat — measure.
+- [x] Zoom control: log-scale slider + "Fit" button + ⌘/ctrl-scroll (and trackpad pinch) zooms around the time under the cursor; wavesurfer handles horizontal scroll. Max 250 px/s (~4 ms/px). Fit uses `ws.zoom(0)` → fillParent owns the width, so window resizes re-fit for free.
+- [x] Peaks density raised: 4000 fixed buckets → max(4000, 20/s), versioned cache (version:2 marker; stale/pre-versioning caches recompute once). Measured on the real 44-min file: 53,617 buckets, 308 KB JSON, 448 ms compute — cheap.
+- [x] Everything still works at zoom: regions/cut shading and drag-select are time-based (scale for free); autoScroll+autoCenter keep the playhead visible; `ws.zoom()` gated on the `decode` event (needs decodedData built from provided peaks).
+- [x] Minimap deferred (YAGNI until zoom navigation actually hurts).
+- Verified: region re-shading perf unchanged (same count, recreated per edit as before); peaks JSON measured, not bloated.
 
 ### Phase 5.5 (candidate, user-suggested): Audio-only export
 - [ ] "Export audio (.m4a/.mp3)" — same keptRanges, atrim/concat only, no video encode (seconds not minutes); for Apple Podcasts / Spotify RSS feeds. Await user go-ahead.

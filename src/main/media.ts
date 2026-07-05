@@ -127,8 +127,12 @@ export async function ensurePreviewProxy(
   return { proxyPath }
 }
 
-const PEAK_BUCKETS = 4000
 const PEAKS_SAMPLE_RATE = 8000
+/** Bucket density: enough detail for zoomed-in waveforms (~50 ms/bucket); 44 min ≈ 53k floats ≈ 300 KB JSON. */
+const PEAKS_PER_SEC = 20
+const PEAK_BUCKETS_MIN = 4000
+/** Bump when bucket density/shape changes so stale cached peaks regenerate. */
+const PEAKS_VERSION = 2
 
 /**
  * Waveform peaks (max-abs per bucket, normalized 0..1) from the extracted
@@ -138,7 +142,10 @@ const PEAKS_SAMPLE_RATE = 8000
 export async function computePeaks(audioPath: string): Promise<PeaksResult> {
   const peaksPath = `${audioPath}.peaks.json`
   const cached = await readFile(peaksPath, 'utf8').catch(() => null)
-  if (cached) return JSON.parse(cached) as PeaksResult
+  if (cached) {
+    const parsed = JSON.parse(cached) as PeaksResult & { version?: number }
+    if (parsed.version === PEAKS_VERSION) return { peaks: parsed.peaks, duration: parsed.duration }
+  }
 
   const raw = await runToolBuffer('ffmpeg', [
     '-v', 'error',
@@ -153,7 +160,8 @@ export async function computePeaks(audioPath: string): Promise<PeaksResult> {
   const samples = new Int16Array(aligned)
   if (samples.length === 0) throw new Error(`No audio samples decoded from ${audioPath}`)
 
-  const bucketSize = Math.max(1, Math.floor(samples.length / PEAK_BUCKETS))
+  const buckets = Math.max(PEAK_BUCKETS_MIN, Math.ceil((samples.length / PEAKS_SAMPLE_RATE) * PEAKS_PER_SEC))
+  const bucketSize = Math.max(1, Math.floor(samples.length / buckets))
   const peaks: number[] = []
   for (let b = 0; b < samples.length; b += bucketSize) {
     let max = 0
@@ -166,6 +174,6 @@ export async function computePeaks(audioPath: string): Promise<PeaksResult> {
   }
 
   const result: PeaksResult = { peaks, duration: samples.length / PEAKS_SAMPLE_RATE }
-  await writeFile(peaksPath, JSON.stringify(result))
+  await writeFile(peaksPath, JSON.stringify({ version: PEAKS_VERSION, ...result }))
   return result
 }

@@ -14,6 +14,10 @@ interface TranscriptViewProps {
   activeMatch: number
   /** Delete-key semantics over an inclusive item range (remove, or restore if all removed). */
   onToggleRange: (from: number, to: number) => void
+  /** Commit an in-place text edit (display/caption text only — never touches cut timing). */
+  onEditText: (index: number, text: string) => void
+  /** Merge this word's text into the previous word (fix Whisper mis-splits); false = blocked. */
+  onMergeWithPrev: (index: number, draftText: string) => boolean
   canUndo: boolean
   canRedo: boolean
   onUndo: () => void
@@ -35,6 +39,54 @@ function SaveIndicator({ status }: { status: SaveStatus }): React.JSX.Element | 
   }
 }
 
+/** Inline editor for one word token; commits on Enter/blur, cancels on Esc, ⌫ at start merges. */
+function TokenEditor({
+  initial,
+  onCommit,
+  onCancel,
+  onMergePrev
+}: {
+  initial: string
+  onCommit: (text: string) => void
+  onCancel: () => void
+  onMergePrev: (draft: string) => void
+}): React.JSX.Element {
+  const [draft, setDraft] = useState(initial)
+  const inputRef = useRef<HTMLInputElement>(null)
+  // Enter/Esc/blur race: whichever settles the edit first wins, later events no-op
+  const doneRef = useRef(false)
+  const settle = (fn: () => void): void => {
+    if (doneRef.current) return
+    doneRef.current = true
+    fn()
+  }
+  useEffect(() => inputRef.current?.select(), [])
+  return (
+    <input
+      ref={inputRef}
+      className="token-edit"
+      value={draft}
+      size={Math.max(2, draft.length + 1)}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => settle(() => onCommit(draft))}
+      onMouseDown={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        e.stopPropagation()
+        if (e.nativeEvent.isComposing) return // CJK IME: Enter/Esc belong to the composer
+        if (e.key === 'Enter') settle(() => onCommit(draft))
+        else if (e.key === 'Escape') settle(onCancel)
+        else if (e.key === 'Backspace') {
+          const el = e.currentTarget
+          if (el.selectionStart === 0 && el.selectionEnd === 0) {
+            e.preventDefault()
+            onMergePrev(draft)
+          }
+        }
+      }}
+    />
+  )
+}
+
 interface ParagraphViewProps {
   items: EditItem[]
   from: number
@@ -46,8 +98,13 @@ interface ParagraphViewProps {
   activeHitTo: number
   selFrom: number
   selTo: number
+  editingIdx: number
   onTokenMouseDown: (index: number, shiftKey: boolean) => void
   onTokenMouseEnter: (index: number) => void
+  onTokenDoubleClick: (index: number) => void
+  onCommitEdit: (index: number, text: string) => void
+  onCancelEdit: () => void
+  onMergePrev: (index: number, draft: string) => void
 }
 
 const ParagraphView = memo(function ParagraphView({
@@ -61,13 +118,20 @@ const ParagraphView = memo(function ParagraphView({
   activeHitTo,
   selFrom,
   selTo,
+  editingIdx,
   onTokenMouseDown,
-  onTokenMouseEnter
+  onTokenMouseEnter,
+  onTokenDoubleClick,
+  onCommitEdit,
+  onCancelEdit,
+  onMergePrev
 }: ParagraphViewProps): React.JSX.Element {
   const tokens: React.ReactNode[] = []
   let prevWordText = ''
   for (let i = from; i < to; i++) {
     const item = items[i]
+    // words blanked by a token merge keep their audio but have no display text
+    if (item.kind === 'word' && item.text === '' && i !== editingIdx) continue
     const classes = [item.kind === 'gap' ? 'gaptok' : 'w']
     if (item.removed) classes.push('cut')
     if (i === activeIdx) classes.push('now')
@@ -77,6 +141,18 @@ const ParagraphView = memo(function ParagraphView({
     if (item.kind === 'word') {
       if (prevWordText && needsSpaceBetween(prevWordText, item.text)) tokens.push(' ')
       prevWordText = item.text
+    }
+    if (i === editingIdx) {
+      tokens.push(
+        <TokenEditor
+          key={`edit-${i}`}
+          initial={item.text}
+          onCommit={(text) => onCommitEdit(i, text)}
+          onCancel={onCancelEdit}
+          onMergePrev={(draft) => onMergePrev(i, draft)}
+        />
+      )
+      continue
     }
     tokens.push(
       <span
@@ -88,6 +164,7 @@ const ParagraphView = memo(function ParagraphView({
           onTokenMouseDown(i, e.shiftKey)
         }}
         onMouseEnter={() => onTokenMouseEnter(i)}
+        onDoubleClick={item.kind === 'word' ? () => onTokenDoubleClick(i) : undefined}
       >
         {item.kind === 'gap' ? `${(item.end - item.start).toFixed(1)}s` : item.text}
       </span>
@@ -124,6 +201,8 @@ export function TranscriptView({
   matches,
   activeMatch,
   onToggleRange,
+  onEditText,
+  onMergeWithPrev,
   canUndo,
   canRedo,
   onUndo,
@@ -135,6 +214,7 @@ export function TranscriptView({
   const [selection, setSelection] = useState<Selection | null>(null)
   const [activeIdx, setActiveIdx] = useState(-1)
   const [follow, setFollow] = useState(true)
+  const [editingIdx, setEditingIdx] = useState(-1)
 
   const paragraphs = useMemo(() => buildParagraphs(items, segments), [items, segments])
 
@@ -167,6 +247,30 @@ export function TranscriptView({
       setSelection((sel) => (sel ? { anchor: sel.anchor, focus: index } : null))
     }
   }, [])
+
+  const onTokenDoubleClick = useCallback((index: number) => {
+    setSelection(null)
+    setEditingIdx(index)
+  }, [])
+
+  const onCommitEdit = useCallback(
+    (index: number, text: string) => {
+      setEditingIdx(-1)
+      onEditText(index, text.trim())
+    },
+    [onEditText]
+  )
+
+  const onCancelEdit = useCallback(() => setEditingIdx(-1), [])
+
+  // ⌫ at the input's start: merge this word into the previous one. If a gap
+  // token blocks the merge, keep the editor (and the draft) open.
+  const onMergePrev = useCallback(
+    (index: number, draft: string) => {
+      if (onMergeWithPrev(index, draft.trim())) setEditingIdx(-1)
+    },
+    [onMergeWithPrev]
+  )
 
   // drag end: plain click (no drag movement) doubles as click-to-seek
   useEffect(() => {
@@ -241,7 +345,9 @@ export function TranscriptView({
           Follow playback
         </label>
         <span className="toolbar-hint">
-          {selection ? 'drag/⇧click to select · ⌫ delete or restore' : 'click seeks · drag selects'}
+          {selection
+            ? 'drag/⇧click to select · ⌫ delete or restore'
+            : 'click seeks · drag selects · double-click edits text'}
         </span>
         <span className="toolbar-actions">
           <SaveIndicator status={saveStatus} />
@@ -264,6 +370,7 @@ export function TranscriptView({
           const paraActive = activeIdx >= p.from && activeIdx < p.to ? activeIdx : -1
           const paraSelFrom = selLo <= p.to - 1 && selHi >= p.from ? Math.max(selLo, p.from) : -1
           const paraSelTo = paraSelFrom >= 0 ? Math.min(selHi, p.to - 1) : -1
+          const paraEditing = editingIdx >= p.from && editingIdx < p.to ? editingIdx : -1
           return (
             <ParagraphView
               key={p.from}
@@ -277,8 +384,13 @@ export function TranscriptView({
               activeHitTo={active?.endWord ?? -1}
               selFrom={paraSelFrom}
               selTo={paraSelTo}
+              editingIdx={paraEditing}
               onTokenMouseDown={onTokenMouseDown}
               onTokenMouseEnter={onTokenMouseEnter}
+              onTokenDoubleClick={onTokenDoubleClick}
+              onCommitEdit={onCommitEdit}
+              onCancelEdit={onCancelEdit}
+              onMergePrev={onMergePrev}
             />
           )
         })}

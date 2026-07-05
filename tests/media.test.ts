@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'vitest'
-import { mkdir, rm } from 'node:fs/promises'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { computePeaks, ensurePreviewProxy, extractAudio, ffprobeJson, probeVideo } from '../src/main/media'
@@ -86,6 +86,19 @@ describe('computePeaks', () => {
     const max = Math.max(...result.peaks)
     expect(max).toBeGreaterThan(0.1) // sine is audible
     expect(max).toBeLessThanOrEqual(1)
+  })
+
+  test('stale cache (old version / no version marker) is recomputed, then reused', async () => {
+    const cacheDir = join(tmp, 'cache')
+    const { audioPath } = await extractAudio(sample, cacheDir)
+    const peaksPath = `${audioPath}.peaks.json`
+    await writeFile(peaksPath, JSON.stringify({ peaks: [0.5], duration: 999 })) // pre-versioning shape
+    const recomputed = await computePeaks(audioPath)
+    expect(recomputed.duration).toBeLessThan(3)
+    expect(recomputed.peaks.length).toBeGreaterThan(100)
+
+    const cached = await computePeaks(audioPath)
+    expect(cached).toEqual(recomputed)
   })
 })
 

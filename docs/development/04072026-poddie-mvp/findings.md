@@ -112,6 +112,19 @@
   a byte-identical export. Merging mis-split tokens keeps each token's time span
   (blank the neighbor's display text; don't delete the item, don't cut audio).
 
+## Peaks density + wavesurfer zoom facts (2026-07-05, Phase 5.1b)
+- 20 buckets/s (50 ms/bucket) on the real 44-min file: 53,617 buckets, 308 KB
+  JSON, 448 ms compute — density is effectively free; don't bother with
+  multi-resolution schemes at this scale
+- Peaks cache needs a version marker: bucket-density changes silently render
+  wrong otherwise (cached JSON has no schema). `{version: N, ...}` + recompute
+  on mismatch, overwrite in place (no orphan files)
+- wavesurfer 7.12.8: `ws.zoom()` throws unless decodedData exists — it's built
+  ASYNC from provided peaks, so gate zoom on the `'decode'` event, not create()
+- `ws.zoom(0)` + fillParent = "fit" that survives window resizes (any fixed
+  px/s value would stop tracking the container width)
+- Regions (cut shading, drag-select) are time-based → zoom scales them for free
+
 ## IPC progress: POLL, don't PUSH (2026-07-05)
 - Push (`event.sender.send` from a captured handler event) is fragile in dev:
   renderer HMR reloads swap the webContents, stranding the old sender → events

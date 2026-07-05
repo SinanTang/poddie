@@ -88,10 +88,18 @@ export function keptRanges(items: EditItem[], durationSec: number, gapMinSec = G
   return kept
 }
 
+/**
+ * A reversible field patch on one item. Cut/restore, text edits, and token
+ * merges are all the same operation: "these fields change on this index" —
+ * one undo/redo code path, and the item COUNT never changes so indices in
+ * history stay valid forever.
+ */
+export type ItemPatch = Partial<Omit<EditItem, 'kind'>>
+
 export interface ItemChange {
   index: number
-  prev: boolean
-  next: boolean
+  prev: ItemPatch
+  next: ItemPatch
 }
 
 /**
@@ -111,16 +119,51 @@ export function toggleRangeChanges(items: EditItem[], from: number, to: number):
   const next = anyKept
   const changes: ItemChange[] = []
   for (let i = lo; i <= hi; i++) {
-    if (items[i].removed !== next) changes.push({ index: i, prev: items[i].removed, next })
+    if (items[i].removed !== next) {
+      changes.push({ index: i, prev: { removed: items[i].removed }, next: { removed: next } })
+    }
   }
   return changes
+}
+
+/**
+ * INVARIANT: text is decorative. Cuts, keptRanges, and the export graph derive
+ * from time spans + `removed` only — a text edit or token merge must never
+ * shift audio (export stays byte-identical). Enforced by tests.
+ */
+export function textEditChanges(items: EditItem[], index: number, text: string): ItemChange[] {
+  const item = items[index]
+  if (!item || item.kind !== 'word' || item.text === text) return []
+  return [{ index, prev: { text: item.text }, next: { text } }]
+}
+
+/**
+ * Fix Whisper mis-splits ("cons"+"ult" → "consult"): concatenate this word's
+ * text into the previous word and blank this one's display text. Both items
+ * KEEP their time spans (audio untouched); the merged word's end extends over
+ * this one so click-to-seek and caption timing cover the union. Blanked words
+ * (already merged away) are skipped over; a gap token blocks merging — don't
+ * silently join words across an audible silence.
+ */
+export function mergeWithPrevChanges(items: EditItem[], index: number, textOverride?: string): ItemChange[] {
+  const item = items[index]
+  const text = textOverride ?? item?.text
+  if (!item || item.kind !== 'word' || !text) return []
+  let p = index - 1
+  while (p >= 0 && items[p].kind === 'word' && items[p].text === '') p--
+  if (p < 0 || items[p].kind !== 'word') return []
+  const prev = items[p]
+  return [
+    { index: p, prev: { text: prev.text, end: prev.end }, next: { text: prev.text + text, end: Math.max(prev.end, item.end) } },
+    { index, prev: { text: item.text }, next: { text: '' } }
+  ]
 }
 
 export function applyChanges(items: EditItem[], changes: ItemChange[], direction: 'next' | 'prev'): EditItem[] {
   if (changes.length === 0) return items
   const out = items.slice()
   for (const c of changes) {
-    out[c.index] = { ...out[c.index], removed: direction === 'next' ? c.next : c.prev }
+    out[c.index] = { ...out[c.index], ...(direction === 'next' ? c.next : c.prev) }
   }
   return out
 }

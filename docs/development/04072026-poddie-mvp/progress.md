@@ -83,6 +83,26 @@
   higher-density precomputed peaks (~10-20 buckets/s), keep cut shading /
   drag-delete / playhead-follow working at zoom. See task_plan Phase 5.1.
 
+## Session 2026-07-05 (Phase 5.1 implementation)
+- 5.1a: shared/edit.ts — ItemChange refactored boolean-flip → reversible field
+  patch {index, prev, next: ItemPatch}; new pure textEditChanges +
+  mergeWithPrevChanges (concat text, span union, blank neighbor, skip blanked
+  words, gap blocks merge). EditState shape/version unchanged → old projects load.
+- 5.1a UI: TranscriptView TokenEditor (double-click word → inline input; Enter/
+  blur commit, Esc cancel w/ settle-once race guard, IME-composition safe,
+  ⌫-at-start merges the DRAFT into prev word; blocked merge keeps editor open).
+  Blanked words skipped in render; App wires onEditText/onMergeWithPrev through
+  the same applyEdit → undo/autosave path.
+- 5.1b: computePeaks density 4000 fixed → max(4000, 20/s) with version:2 cache
+  marker (stale caches recompute once). Real 44-min file measured: 53,617
+  buckets, 308 KB JSON, 448 ms compute. Waveform.tsx: log-scale zoom slider +
+  Fit (ws.zoom(0) → fillParent, resize-proof) + ⌘-scroll zoom-at-cursor via
+  getScroll/setScroll; zoom gated on 'decode' (needs decodedData from peaks).
+- Tests 78/78 ✅ (+9: patch-model toggle/apply updates, textEditChanges,
+  mergeWithPrevChanges incl. chain + gap-block, keptRanges-invariance
+  "text never moves audio", stale-peaks-cache recompute) typecheck ✅ lint ✅
+- Awaiting user verification in the app UI
+
 ## Test results
 - 2026-07-05: `npm run typecheck` ✅  `npm run lint` ✅  `npm test` ✅ 4/4
   (probe metadata, no-video-stream rejection, mono-16kHz extraction, cache hit)

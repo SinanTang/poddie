@@ -278,6 +278,18 @@ input[type='search'] {
   color: #6b7280;
 }
 
+.token-edit {
+  font: inherit;
+  background: #26282e;
+  border: 1px solid #3b82f6;
+  border-radius: 3px;
+  color: #e6e6e6;
+  padding: 0 2px;
+  margin: 0 1px;
+  line-height: 1.4;
+  outline: none;
+}
+
 .gaptok {
   display: inline-block;
   font-size: 11px;
@@ -329,6 +341,28 @@ input[type='search'] {
   flex-shrink: 0;
   border-top: 1px solid #2e3138;
   padding: 4px 12px;
+}
+
+.wave-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 3px;
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.wave-zoom-label {
+  color: #9ca3af;
+}
+
+.wave-toolbar input[type='range'] {
+  width: 180px;
+  accent-color: #3b82f6;
+}
+
+.wave-hint {
+  margin-left: auto;
 }
 
 .waveform-placeholder {

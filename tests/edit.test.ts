@@ -3,7 +3,9 @@ import {
   applyChanges,
   deriveItems,
   keptRanges,
+  mergeWithPrevChanges,
   removedRanges,
+  textEditChanges,
   toggleRangeChanges,
   type EditItem
 } from '../src/shared/edit'
@@ -92,8 +94,8 @@ describe('toggleRangeChanges (delete-key semantics)', () => {
     items[1] = { ...items[1], removed: true }
     const changes = toggleRangeChanges(items, 1, 3)
     expect(changes).toEqual([
-      { index: 2, prev: false, next: true },
-      { index: 3, prev: false, next: true }
+      { index: 2, prev: { removed: false }, next: { removed: true } },
+      { index: 3, prev: { removed: false }, next: { removed: true } }
     ])
   })
 
@@ -101,7 +103,7 @@ describe('toggleRangeChanges (delete-key semantics)', () => {
     const items = derive().map((i) => ({ ...i, removed: true }))
     const changes = toggleRangeChanges(items, 0, 5)
     expect(changes).toHaveLength(6)
-    expect(changes.every((c) => !c.next)).toBe(true)
+    expect(changes.every((c) => c.next.removed === false)).toBe(true)
   })
 
   test('reversed and out-of-bounds selections are clamped', () => {
@@ -121,5 +123,77 @@ describe('applyChanges', () => {
 
     const reverted = applyChanges(applied, changes, 'prev')
     expect(reverted.map((i) => i.removed)).toEqual(items.map((i) => i.removed))
+  })
+})
+
+describe('textEditChanges', () => {
+  test('changing a word produces one reversible text patch', () => {
+    const items = derive()
+    const changes = textEditChanges(items, 1, 'a,')
+    expect(changes).toEqual([{ index: 1, prev: { text: 'a' }, next: { text: 'a,' } }])
+    const applied = applyChanges(items, changes, 'next')
+    expect(applied[1].text).toBe('a,')
+    expect(applyChanges(applied, changes, 'prev')[1].text).toBe('a')
+  })
+
+  test('no-op text and gap tokens produce no changes', () => {
+    const items = derive()
+    expect(textEditChanges(items, 1, 'a')).toEqual([])
+    expect(textEditChanges(items, 0, 'x')).toEqual([]) // gap
+    expect(textEditChanges(items, 99, 'x')).toEqual([])
+  })
+})
+
+describe('mergeWithPrevChanges', () => {
+  // words b [2.1, 2.5] and c [2.6, 3.5] are adjacent items (indices 3, 4)
+  test('merges into previous word: text concat, end = union, current blanked', () => {
+    const items = derive()
+    const merged = applyChanges(items, mergeWithPrevChanges(items, 4), 'next')
+    expect(merged[3]).toMatchObject({ text: 'bc', start: 2.1, end: 3.5 })
+    expect(merged[4]).toMatchObject({ text: '', start: 2.6, end: 3.5 }) // span kept, display blanked
+  })
+
+  test('undo restores both tokens exactly', () => {
+    const items = derive()
+    const changes = mergeWithPrevChanges(items, 4)
+    const roundTrip = applyChanges(applyChanges(items, changes, 'next'), changes, 'prev')
+    expect(roundTrip).toEqual(items)
+  })
+
+  test('skips blanked words from earlier merges (chain "cons ult ing")', () => {
+    const words = [w('cons', 1.0, 1.2), w('ult', 1.2, 1.4), w('ing', 1.4, 1.6)]
+    let items = deriveItems(words, 2.0)
+    const wordAt = (text: string): number => items.findIndex((i) => i.text === text)
+    items = applyChanges(items, mergeWithPrevChanges(items, wordAt('ult')), 'next')
+    items = applyChanges(items, mergeWithPrevChanges(items, wordAt('ing')), 'next')
+    expect(items.filter((i) => i.kind === 'word' && i.text !== '')).toEqual([
+      { kind: 'word', text: 'consulting', start: 1.0, end: 1.6, removed: false }
+    ])
+  })
+
+  test('refuses to merge across a gap token, at the first word, or on gaps', () => {
+    const items = derive()
+    expect(mergeWithPrevChanges(items, 3)).toEqual([]) // word b — previous item is the 0.6 s gap
+    expect(mergeWithPrevChanges(items, 1)).toEqual([]) // first word — nothing before but a gap
+    expect(mergeWithPrevChanges(items, 2)).toEqual([]) // gap token itself
+  })
+
+  test('textOverride merges the in-flight draft, not the stale token text', () => {
+    const items = derive()
+    const merged = applyChanges(items, mergeWithPrevChanges(items, 4, 'C!'), 'next')
+    expect(merged[3].text).toBe('bC!')
+  })
+})
+
+describe('invariant: text edits never move audio', () => {
+  test('keptRanges identical before and after edits + merges (export stays byte-identical)', () => {
+    const items = derive()
+    items[2] = { ...items[2], removed: true } // a real cut, so kept ranges are non-trivial
+    const before = keptRanges(items, DURATION)
+
+    let edited = applyChanges(items, textEditChanges(items, 1, 'A, rewritten'), 'next')
+    edited = applyChanges(edited, mergeWithPrevChanges(edited, 4), 'next')
+    expect(keptRanges(edited, DURATION)).toEqual(before)
+    expect(removedRanges(edited)).toEqual(removedRanges(items))
   })
 })
