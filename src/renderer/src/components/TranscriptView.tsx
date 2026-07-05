@@ -18,6 +18,9 @@ interface TranscriptViewProps {
   onEditText: (index: number, text: string) => void
   /** Merge this word's text into the previous word (fix Whisper mis-splits); false = blocked. */
   onMergeWithPrev: (index: number, draftText: string) => boolean
+  /** How many silences a bulk trim would cut right now (0 disables the button). */
+  silenceTrimCount: number
+  onTrimSilences: () => void
   canUndo: boolean
   canRedo: boolean
   onUndo: () => void
@@ -203,6 +206,8 @@ export function TranscriptView({
   onToggleRange,
   onEditText,
   onMergeWithPrev,
+  silenceTrimCount,
+  onTrimSilences,
   canUndo,
   canRedo,
   onUndo,
@@ -351,6 +356,14 @@ export function TranscriptView({
         </span>
         <span className="toolbar-actions">
           <SaveIndicator status={saveStatus} />
+          <button
+            className="ghost small"
+            onClick={onTrimSilences}
+            disabled={silenceTrimCount === 0}
+            title="Cut every silence ≥ 0.75 s, keeping 0.15 s next to speech (one undo step)"
+          >
+            ✂ Trim {silenceTrimCount} silences
+          </button>
           <button className="ghost small" onClick={onUndo} disabled={!canUndo} title="Undo (⌘Z)">
             ↩ Undo
           </button>

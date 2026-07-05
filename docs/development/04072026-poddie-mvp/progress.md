@@ -140,6 +140,23 @@
 - Tests 95/95 (+2 gated skips) ✅ typecheck ✅ lint ✅
 - Awaiting user verification (export SRT for the real project)
 
+## Session 2026-07-05 (Phase 6: silence auto-trim + burn-in unblocked)
+- ffmpeg-full guidance: homebrew split the formula; `brew install ffmpeg-full`
+  is bottled, keg-only (/opt/homebrew/opt/ffmpeg-full/bin), includes libass +
+  whisper-cpp. resolveTool now prefers the ffmpeg-full keg automatically
+  (override order: PODDIE_FFMPEG > ffmpeg-full > /opt/homebrew/bin > PATH).
+- User installed ffmpeg-full mid-session → burn-in real-encode test detected
+  libass and PASSED (no longer skipped). App restart re-probes → checkbox on.
+- Silence auto-trim: shared/edit.ts trimSilenceChanges (gaps ≥ 0.75 s → span
+  shrunk inward 0.15 s per speech-adjacent side + removed, in ONE ItemPatch;
+  file-edge sides unpadded; pad-consumed gaps skipped). Toolbar "✂ Trim N
+  silences" with live count; single undo step. 6 new unit tests (padding
+  placement, word-edge safety, threshold override incl. fp-rounding fix,
+  skip rules, undo round-trip).
+- Tests 102/102 (+1 e2e skip) ✅ typecheck ✅ lint ✅
+- Awaiting user verification: trim silences on the real project + burn-in
+  export after app restart
+
 ## Test results
 - 2026-07-05: `npm run typecheck` ✅  `npm run lint` ✅  `npm test` ✅ 4/4
   (probe metadata, no-video-stream rejection, mono-16kHz extraction, cache hit)

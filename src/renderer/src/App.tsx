@@ -9,6 +9,7 @@ import {
   removedRanges,
   textEditChanges,
   toggleRangeChanges,
+  trimSilenceChanges,
   type EditItem,
   type ItemChange
 } from '../../shared/edit'
@@ -221,6 +222,10 @@ export default function App(): React.JSX.Element {
     }, 800)
     return () => clearTimeout(timer)
   }, [items, video])
+
+  // pending bulk silence trims — recomputed as edits change, applied as ONE undo step
+  const silenceTrims = useMemo(() => (items ? trimSilenceChanges(items) : []), [items])
+  const onTrimSilences = useCallback(() => applyEdit(silenceTrims), [silenceTrims, applyEdit])
 
   const cuts = useMemo(() => (items ? removedRanges(items) : []), [items])
   const kept = useMemo(
@@ -437,6 +442,8 @@ export default function App(): React.JSX.Element {
                   onToggleRange={onToggleRange}
                   onEditText={onEditText}
                   onMergeWithPrev={onMergeWithPrev}
+                  silenceTrimCount={silenceTrims.length}
+                  onTrimSilences={onTrimSilences}
                   canUndo={(editState?.past.length ?? 0) > 0}
                   canRedo={(editState?.future.length ?? 0) > 0}
                   onUndo={undo}

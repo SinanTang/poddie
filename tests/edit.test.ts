@@ -7,6 +7,7 @@ import {
   removedRanges,
   textEditChanges,
   toggleRangeChanges,
+  trimSilenceChanges,
   type EditItem
 } from '../src/shared/edit'
 import type { TranscriptWord } from '../src/shared/types'
@@ -182,6 +183,58 @@ describe('mergeWithPrevChanges', () => {
     const items = derive()
     const merged = applyChanges(items, mergeWithPrevChanges(items, 4, 'C!'), 'next')
     expect(merged[3].text).toBe('bC!')
+  })
+})
+
+describe('trimSilenceChanges', () => {
+  // derived items: gap[0,1.0] lead-in, a, gap[1.5,2.1], b, c, gap[3.5,5.0] tail
+  test('trims long gaps with padding on speech-adjacent sides only', () => {
+    const items = derive()
+    const changes = trimSilenceChanges(items)
+    expect(changes.map((c) => c.index)).toEqual([0, 5]) // lead-in + tail; the 0.6 s mid gap is below 0.75
+    // lead-in: no pad at the file start, pad before word a
+    expect(changes[0].next).toEqual({ removed: true, start: 0, end: 0.85 })
+    // tail: pad after word c, no pad at the file end
+    expect(changes[1].next).toEqual({ removed: true, start: 3.65, end: 5.0 })
+  })
+
+  test('cuts land mid-silence, never on word edges', () => {
+    const items = derive()
+    const trimmed = applyChanges(items, trimSilenceChanges(items), 'next')
+    // word a spans [1.0, 1.5]; the lead-in cut ends 0.15 before it
+    expect(keptRanges(trimmed, DURATION)[0]).toEqual({ start: 0.85, end: 3.65 })
+  })
+
+  test('skips short, already-removed, and word items', () => {
+    const items = derive()
+    items[5] = { ...items[5], removed: true } // tail already cut by hand
+    const changes = trimSilenceChanges(items)
+    expect(changes.map((c) => c.index)).toEqual([0])
+  })
+
+  test('lower threshold catches the mid gap too', () => {
+    const items = derive()
+    const changes = trimSilenceChanges(items, 0.5)
+    expect(changes.map((c) => c.index)).toEqual([0, 2, 5])
+    expect(changes[1].next.removed).toBe(true)
+    expect(changes[1].next.start).toBeCloseTo(1.65, 10) // padded both sides
+    expect(changes[1].next.end).toBeCloseTo(1.95, 10)
+  })
+
+  test('skips a gap the padding would fully consume', () => {
+    const gapOnly: EditItem[] = [
+      { kind: 'word', text: 'a', start: 0, end: 1, removed: false },
+      { kind: 'gap', text: '', start: 1, end: 1.8, removed: false },
+      { kind: 'word', text: 'b', start: 1.8, end: 2, removed: false }
+    ]
+    expect(trimSilenceChanges(gapOnly, 0.75, 0.4)).toEqual([]) // 0.8 s gap − 2×0.4 pad → nothing left
+  })
+
+  test('one undo restores the original silences exactly', () => {
+    const items = derive()
+    const changes = trimSilenceChanges(items)
+    const roundTrip = applyChanges(applyChanges(items, changes, 'next'), changes, 'prev')
+    expect(roundTrip).toEqual(items)
   })
 })
 
