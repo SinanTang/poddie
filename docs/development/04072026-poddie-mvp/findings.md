@@ -238,6 +238,16 @@ word boundary of each transcript should meet each real silence edge.
   CENTIseconds; words must be reconstructed from BPE tokens (CJK ≈ 1–2 chars
   per token, Latin merges on leading space). No 25 MB limit → chunking module
   stays API-only. Spike scripts: scratchpad drift.py / silence_edge.py.
+- **Coarse token ENDS fake mid-speech gaps (found during integration)**: raw
+  reconstruction gave 98 inter-word gaps ≥0.35 s in a 3-min window where the
+  API had 14 — 62 were mid-speech (token end offsets truncate words early),
+  11 of them ≥0.75 s, i.e. silence auto-trim would have cut audible speech
+  11 times per 3 min. whisper.cpp's own word mode (-ml 1 -sow) is useless for
+  CJK (no spaces → no splits). Fix that shipped: snap to ffmpeg silencedetect
+  (noise=-35dB, d=0.25) — a gap with no detected silence is bridged away, a
+  real gap snaps to the measured silence bounds (fake ≥0.75 s → ~0, validated
+  on all 3 windows). whisper-1 API word ends don't need this. Implementation:
+  parseWhisperCppJson/snapToSilences in src/main/whisper-local.ts.
 
 ## Open questions (resolve during build, not before)
 - Does wavesurfer 7 handle a 1 h m4a decode fast enough, or do we need

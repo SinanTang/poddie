@@ -41,6 +41,23 @@ h1 {
   flex: 1;
 }
 
+.engine-pick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #9aa1ac;
+}
+
+.engine-pick select {
+  background: #23262d;
+  color: #e6e8eb;
+  border: 1px solid #2e3138;
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
 button {
   background: #3b82f6;
   color: white;

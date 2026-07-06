@@ -18,7 +18,15 @@ import { buildSearchIndex, findMatches } from './lib/transcript'
 import { SearchBar } from './components/SearchBar'
 import { TranscriptView } from './components/TranscriptView'
 import { Waveform } from './components/Waveform'
-import type { ApiKeyStatus, AppInfo, PeaksResult, Project, TranscribeProgress, VideoInfo } from '../../shared/types'
+import type {
+  ApiKeyStatus,
+  AppInfo,
+  PeaksResult,
+  Project,
+  TranscribeEngine,
+  TranscribeProgress,
+  VideoInfo
+} from '../../shared/types'
 
 function ApiKeyBar({ status, onSaved }: { status: ApiKeyStatus; onSaved: (s: ApiKeyStatus) => void }): React.JSX.Element {
   const [draft, setDraft] = useState('')
@@ -75,6 +83,9 @@ export default function App(): React.JSX.Element {
   const [project, setProject] = useState<Project | null>(null)
   const [editState, setEditState] = useState<EditHistory | null>(null)
   const [keyStatus, setKeyStatus] = useState<ApiKeyStatus | null>(null)
+  const [engine, setEngine] = useState<TranscribeEngine>(() =>
+    localStorage.getItem('poddie.engine') === 'local' ? 'local' : 'api'
+  )
   const [tProgress, setTProgress] = useState<TranscribeProgress | null>(null)
   const [proxy, setProxy] = useState<ProxyState>({ status: 'none', path: null, fraction: 0 })
   const [peaks, setPeaks] = useState<PeaksResult | null>(null)
@@ -117,6 +128,32 @@ export default function App(): React.JSX.Element {
     }, 400)
     return () => clearInterval(id)
   }, [isExporting])
+
+  // The engine picks the active project file (api → .poddie.json, local →
+  // .poddie.local.json) — loading lives here so opening a video and flipping
+  // the engine are the same code path.
+  const videoPath = video?.path ?? null
+  useEffect(() => {
+    if (!videoPath) return
+    let stale = false
+    window.poddie
+      .loadProject(videoPath, engine)
+      .then((p) => {
+        if (!stale) setProject(p)
+      })
+      .catch((err) => setError(`Could not load project: ${err instanceof Error ? err.message : String(err)}`))
+    return () => {
+      stale = true
+    }
+  }, [videoPath, engine])
+
+  function switchEngine(next: TranscribeEngine): void {
+    // a pending autosave must not follow the flip and write into the other
+    // engine's project file — the edit state re-initializes on reload anyway
+    dirtyRef.current = false
+    localStorage.setItem('poddie.engine', next)
+    setEngine(next)
+  }
 
   // (Re)initialize edit state whenever the project changes: saved edits win,
   // otherwise derive words + gap tokens fresh from the transcript
@@ -206,14 +243,14 @@ export default function App(): React.JSX.Element {
     [items, applyEdit]
   )
 
-  // debounced autosave of edit state into the project file
+  // debounced autosave of edit state into the active engine's project file
   useEffect(() => {
     if (!video || !items || !dirtyRef.current) return
     const timer = setTimeout(() => {
       dirtyRef.current = false
       setSaveStatus({ state: 'saving' })
       window.poddie
-        .saveEdit(video.path, { version: 1, gapMinSec: GAP_MIN_SEC, items })
+        .saveEdit(video.path, { version: 1, gapMinSec: GAP_MIN_SEC, items }, engine)
         .then(() => setSaveStatus({ state: 'saved', at: new Date().toLocaleTimeString() }))
         .catch((err) => {
           setSaveStatus({ state: 'failed' })
@@ -221,7 +258,7 @@ export default function App(): React.JSX.Element {
         })
     }, 800)
     return () => clearTimeout(timer)
-  }, [items, video])
+  }, [items, video, engine])
 
   // pending bulk silence trims — recomputed as edits change, applied as ONE undo step
   const silenceTrims = useMemo(() => (items ? trimSilenceChanges(items) : []), [items])
@@ -272,7 +309,7 @@ export default function App(): React.JSX.Element {
         setPeaks(null)
         setQuery('')
         setProxy({ status: info.needsProxy ? 'preparing' : 'none', path: null, fraction: 0 })
-        setProject(await window.poddie.loadProject(info.path))
+        // the [videoPath, engine] effect loads the project for the active engine
 
         window.poddie
           .getPeaks(info.path)
@@ -300,8 +337,8 @@ export default function App(): React.JSX.Element {
     setError(null)
     setBusy('Transcribing…')
     try {
-      const result = await window.poddie.transcribe(video.path)
-      if (result) setProject(result) // null = user canceled the cost dialog
+      const result = await window.poddie.transcribe(video.path, engine)
+      if (result) setProject(result) // null = user canceled the confirmation dialog
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
       setTProgress(null)
@@ -415,6 +452,15 @@ export default function App(): React.JSX.Element {
           />
         )}
         <span className="spacer" />
+        <label className="engine-pick" title={appInfo?.localWhisper.hint ?? undefined}>
+          Whisper:
+          <select value={engine} onChange={(e) => switchEngine(e.target.value as TranscribeEngine)}>
+            <option value="api">OpenAI API</option>
+            <option value="local" disabled={!appInfo?.localWhisper.available}>
+              Local (whisper.cpp)
+            </option>
+          </select>
+        </label>
         {keyStatus && <ApiKeyBar status={keyStatus} onSaved={setKeyStatus} />}
         <button onClick={openVideo} disabled={busy !== null}>
           Open Video…
@@ -453,10 +499,18 @@ export default function App(): React.JSX.Element {
               ) : (
                 <div className="empty-state">
                   <p>No transcript yet.</p>
-                  <button onClick={transcribe} disabled={busy !== null || !keyStatus?.present || !video.audioCodec}>
-                    Transcribe (~${costEstimate})
+                  <button
+                    onClick={transcribe}
+                    disabled={busy !== null || (engine === 'api' && !keyStatus?.present) || !video.audioCodec}
+                  >
+                    {engine === 'local' ? 'Transcribe locally (free)' : `Transcribe (~$${costEstimate})`}
                   </button>
-                  {!keyStatus?.present && <p className="hint">Set an OpenAI API key first (top right).</p>}
+                  {engine === 'api' && !keyStatus?.present && (
+                    <p className="hint">Set an OpenAI API key first (top right), or switch Whisper to Local.</p>
+                  )}
+                  {engine === 'local' && appInfo && !appInfo.localWhisper.modelPresent && (
+                    <p className="hint">First run downloads the Whisper model (~1.6 GB).</p>
+                  )}
                   {tProgress && busy && (
                     <span className="progress">
                       <progress value={tProgress.fraction} max={1} /> {tProgress.message}
@@ -555,7 +609,11 @@ export default function App(): React.JSX.Element {
                 </div>
               )}
               {transcript && (
-                <button className="ghost small" onClick={transcribe} disabled={busy !== null || exporting !== null || !keyStatus?.present}>
+                <button
+                  className="ghost small"
+                  onClick={transcribe}
+                  disabled={busy !== null || exporting !== null || (engine === 'api' && !keyStatus?.present)}
+                >
                   Re-transcribe…
                 </button>
               )}

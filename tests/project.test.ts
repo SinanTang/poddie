@@ -49,4 +49,32 @@ describe('project persistence', () => {
     await writeFile(projectPathFor(badVideo), JSON.stringify({ version: 99 }))
     await expect(loadProject(badVideo)).rejects.toThrow(/unsupported project version/i)
   })
+
+  test('each engine owns its own project file — local never touches the api file', async () => {
+    expect(projectPathFor(videoPath, 'api')).toBe(`${videoPath}.poddie.json`)
+    expect(projectPathFor(videoPath, 'local')).toBe(`${videoPath}.poddie.local.json`)
+
+    const apiBefore = await loadProject(videoPath, 'api')
+    expect(apiBefore?.transcript?.model).toBe('whisper-1') // saved by the roundtrip test above
+
+    expect(await loadProject(videoPath, 'local')).toBeNull()
+    const localProject: Project = {
+      version: 1,
+      videoPath,
+      fingerprint: await fingerprintOf(videoPath),
+      transcript: {
+        language: 'zh',
+        durationSec: 12.3,
+        model: 'whisper.cpp large-v3-turbo',
+        createdAt: '2026-07-06T00:00:00.000Z',
+        words: [{ text: '你好', start: 0.5, end: 0.9 }],
+        segments: [{ text: '你好', start: 0.5, end: 0.9 }]
+      },
+      updatedAt: ''
+    }
+    await saveProject(localProject, 'local')
+
+    expect((await loadProject(videoPath, 'local'))?.transcript?.model).toBe('whisper.cpp large-v3-turbo')
+    expect(await loadProject(videoPath, 'api')).toEqual(apiBefore) // untouched
+  })
 })

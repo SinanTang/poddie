@@ -67,6 +67,18 @@ export interface ApiKeyStatus {
   source: 'env' | 'config' | null
 }
 
+/** Which Whisper runs a transcription. Each engine has its own project file, so the paid API transcript survives local experiments. */
+export type TranscribeEngine = 'api' | 'local'
+
+export interface LocalWhisperStatus {
+  /** whisper-cli binary found and healthy. */
+  available: boolean
+  /** Install hint when unavailable; null when available. */
+  hint: string | null
+  /** Model file already on disk (first local transcription downloads ~1.6 GB otherwise). */
+  modelPresent: boolean
+}
+
 export interface PeaksResult {
   /** Max-abs amplitude per bucket, normalized 0..1. */
   peaks: number[]
@@ -79,6 +91,8 @@ export interface AppInfo {
   mediaBaseUrl: string
   /** Whether ffmpeg has the subtitles (libass) filter — gates caption burn-in. */
   canBurnCaptions: boolean
+  /** Whether local whisper.cpp transcription is available — gates the engine toggle. */
+  localWhisper: LocalWhisperStatus
 }
 
 export const IPC = {
@@ -108,10 +122,11 @@ export interface PoddieApi {
   extractAudio(videoPath: string): Promise<AudioExtractResult>
   getApiKeyStatus(): Promise<ApiKeyStatus>
   setApiKey(key: string): Promise<ApiKeyStatus>
-  loadProject(videoPath: string): Promise<Project | null>
-  saveEdit(videoPath: string, edit: import('./edit').EditState): Promise<void>
-  /** Resolves to null when the user cancels the cost-confirmation dialog. */
-  transcribe(videoPath: string): Promise<Project | null>
+  /** Engine selects the project file: api → <video>.poddie.json, local → <video>.poddie.local.json. */
+  loadProject(videoPath: string, engine: TranscribeEngine): Promise<Project | null>
+  saveEdit(videoPath: string, edit: import('./edit').EditState, engine: TranscribeEngine): Promise<void>
+  /** Resolves to null when the user cancels the confirmation dialog. */
+  transcribe(videoPath: string, engine: TranscribeEngine): Promise<Project | null>
   /** Subscribe to transcription progress; returns an unsubscribe function. */
   onTranscribeProgress(cb: (p: TranscribeProgress) => void): () => void
   /** Create or fetch the cached H.264 preview proxy (for HEVC sources). */

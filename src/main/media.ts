@@ -71,20 +71,27 @@ function cacheKeyFor(videoPath: string, source: { mtimeMs: number; size: number 
 }
 
 /**
- * Extract mono 16 kHz 64 kbps m4a for Whisper. Cached by (path, mtime, size)
- * so re-opening the same video is instant. Writes to a .part file first so a
- * crashed ffmpeg can never leave a truncated file behind as a valid cache hit.
+ * Extract mono 16 kHz audio for Whisper — m4a (64 kbps, small enough to
+ * upload) for the API, wav (pcm_s16le) for whisper-cli, which can't read m4a.
+ * Cached by (path, mtime, size) so re-opening the same video is instant.
+ * Writes to a .part file first so a crashed ffmpeg can never leave a
+ * truncated file behind as a valid cache hit.
  */
-export async function extractAudio(videoPath: string, cacheDir: string): Promise<AudioExtractResult> {
+export async function extractAudio(
+  videoPath: string,
+  cacheDir: string,
+  format: 'm4a' | 'wav' = 'm4a'
+): Promise<AudioExtractResult> {
   await mkdir(cacheDir, { recursive: true })
   const source = await stat(videoPath)
-  const audioPath = join(cacheDir, `${cacheKeyFor(videoPath, source)}.m4a`)
+  const audioPath = join(cacheDir, `${cacheKeyFor(videoPath, source)}.${format}`)
 
   const cached = await stat(audioPath).catch(() => null)
   if (cached) return { audioPath, sizeBytes: cached.size }
 
-  const partPath = `${audioPath}.part.m4a`
-  await runTool('ffmpeg', ['-y', '-i', videoPath, '-vn', '-ac', '1', '-ar', '16000', '-b:a', '64k', partPath])
+  const codecArgs = format === 'wav' ? ['-c:a', 'pcm_s16le'] : ['-b:a', '64k']
+  const partPath = `${audioPath}.part.${format}`
+  await runTool('ffmpeg', ['-y', '-i', videoPath, '-vn', '-ac', '1', '-ar', '16000', ...codecArgs, partPath])
   await rename(partPath, audioPath)
   const out = await stat(audioPath)
   return { audioPath, sizeBytes: out.size }

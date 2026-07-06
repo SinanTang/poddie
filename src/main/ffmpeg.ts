@@ -4,7 +4,14 @@ import { log } from './logger'
 
 const execFileAsync = promisify(execFile)
 
-type Tool = 'ffmpeg' | 'ffprobe'
+type Tool = 'ffmpeg' | 'ffprobe' | 'whisper-cli'
+
+const VERSION_ARG: Record<Tool, string> = { ffmpeg: '-version', ffprobe: '-version', 'whisper-cli': '--version' }
+const INSTALL_HINT: Record<Tool, string> = {
+  ffmpeg: 'brew install ffmpeg',
+  ffprobe: 'brew install ffmpeg',
+  'whisper-cli': 'brew install whisper-cpp'
+}
 
 const resolved = new Map<Tool, string>()
 
@@ -13,13 +20,15 @@ const resolved = new Map<Tool, string>()
  * shell PATH on macOS, so we probe the common homebrew locations explicitly.
  * ffmpeg-full (keg-only, never in /opt/homebrew/bin) is preferred when
  * installed: same codecs plus libass, which caption burn-in needs and the
- * regular bottle lacks. Override with PODDIE_FFMPEG / PODDIE_FFPROBE.
+ * regular bottle lacks. Override with PODDIE_FFMPEG / PODDIE_FFPROBE /
+ * PODDIE_WHISPER_CLI. Every candidate gets a version health check — a binary
+ * that exists but can't launch (broken dylib) must not win.
  */
 export async function resolveTool(tool: Tool): Promise<string> {
   const cached = resolved.get(tool)
   if (cached) return cached
 
-  const override = process.env[`PODDIE_${tool.toUpperCase()}`]
+  const override = process.env[`PODDIE_${tool.toUpperCase().replace(/-/g, '_')}`]
   const candidates = [
     override,
     `/opt/homebrew/opt/ffmpeg-full/bin/${tool}`,
@@ -29,14 +38,14 @@ export async function resolveTool(tool: Tool): Promise<string> {
   ].filter((c): c is string => Boolean(c))
   for (const candidate of candidates) {
     try {
-      await execFileAsync(candidate, ['-version'])
+      await execFileAsync(candidate, [VERSION_ARG[tool]])
       resolved.set(tool, candidate)
       return candidate
     } catch {
       // try the next candidate
     }
   }
-  throw new Error(`${tool} not found (tried: ${candidates.join(', ')}). Install with: brew install ffmpeg`)
+  throw new Error(`${tool} not found (tried: ${candidates.join(', ')}). Install with: ${INSTALL_HINT[tool]}`)
 }
 
 let filterNames: Set<string> | null = null

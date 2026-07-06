@@ -7,9 +7,9 @@ const api: PoddieApi = {
   extractAudio: (videoPath) => ipcRenderer.invoke(IPC.extractAudio, videoPath),
   getApiKeyStatus: () => ipcRenderer.invoke(IPC.apiKeyStatus),
   setApiKey: (key) => ipcRenderer.invoke(IPC.apiKeySet, key),
-  loadProject: (videoPath) => ipcRenderer.invoke(IPC.projectLoad, videoPath),
-  saveEdit: (videoPath, edit) => ipcRenderer.invoke(IPC.projectSaveEdit, videoPath, edit),
-  transcribe: (videoPath) => ipcRenderer.invoke(IPC.transcribeStart, videoPath),
+  loadProject: (videoPath, engine) => ipcRenderer.invoke(IPC.projectLoad, videoPath, engine),
+  saveEdit: (videoPath, edit, engine) => ipcRenderer.invoke(IPC.projectSaveEdit, videoPath, edit, engine),
+  transcribe: (videoPath, engine) => ipcRenderer.invoke(IPC.transcribeStart, videoPath, engine),
   onTranscribeProgress: (cb) => {
     const listener = (_event: IpcRendererEvent, p: TranscribeProgress): void => cb(p)
     ipcRenderer.on(IPC.transcribeProgress, listener)

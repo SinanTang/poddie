@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
+import { existsSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import icon from '../../resources/icon.png?asset'
@@ -8,12 +9,13 @@ import type { TimeRange } from '../shared/edit'
 import { computePeaks, ensurePreviewProxy, extractAudio, ffprobeJson, probeVideo } from './media'
 import { startMediaServer, type MediaServer } from './media-server'
 import { getApiKey, getApiKeyStatus, loadEnvFile, setApiKey } from './config'
-import { loadProject, saveProject } from './project'
+import { loadProject, projectPathFor, saveProject } from './project'
 import type { EditState } from '../shared/edit'
 import { transcribeVideo } from './transcribe'
+import { modelPathIn, probeLocalWhisper } from './whisper-local'
 import { getLogPath, initLogger, log, logError } from './logger'
 import { fmtDuration, whisperCostUsd } from '../shared/format'
-import { IPC, type TranscribeProgress } from '../shared/types'
+import { IPC, type TranscribeEngine, type TranscribeProgress } from '../shared/types'
 
 // In dev, app path is the project root — picks up the user's .env (OPENAI_API_KEY)
 loadEnvFile(join(app.getAppPath(), '.env'))
@@ -65,14 +67,22 @@ app.whenReady().then(async () => {
 
   mediaServer = await startMediaServer()
   const cacheDir = join(app.getPath('userData'), 'cache')
+  const modelsDir = join(app.getPath('userData'), 'models')
   // homebrew's current ffmpeg bottle lacks libass — probe instead of assuming
   const canBurnCaptions = await hasFilter('subtitles').catch(() => false)
   if (!canBurnCaptions) log('info', 'captions', 'ffmpeg lacks the subtitles filter (libass) — burn-in disabled')
+  const localWhisper = await probeLocalWhisper(modelsDir)
+  if (!localWhisper.available) log('info', 'whisper-local', `local transcription disabled: ${localWhisper.hint}`)
+
+  // engine comes over IPC — normalize instead of trusting the wire
+  const asEngine = (engine: unknown): TranscribeEngine => (engine === 'local' ? 'local' : 'api')
 
   handleIpc(IPC.appInfo, async () => ({
     logPath: getLogPath(),
     mediaBaseUrl: mediaServer!.baseUrl,
-    canBurnCaptions
+    canBurnCaptions,
+    // modelPresent flips after the first in-app download — re-probe per call
+    localWhisper: localWhisper.available ? await probeLocalWhisper(modelsDir) : localWhisper
   }))
 
   handleIpc(IPC.selectVideo, async () => {
@@ -102,39 +112,55 @@ app.whenReady().then(async () => {
 
   handleIpc(IPC.apiKeySet, async (_event, key: string) => setApiKey(app.getPath('userData'), key))
 
-  handleIpc(IPC.projectLoad, async (_event, videoPath: string) => loadProject(videoPath))
+  handleIpc(IPC.projectLoad, async (_event, videoPath: string, engine?: TranscribeEngine) =>
+    loadProject(videoPath, asEngine(engine))
+  )
 
-  handleIpc(IPC.projectSaveEdit, async (_event, videoPath: string, edit: EditState) => {
-    const project = await loadProject(videoPath)
-    if (!project) throw new Error(`No project file to save edits into (${videoPath}.poddie.json missing)`)
+  handleIpc(IPC.projectSaveEdit, async (_event, videoPath: string, edit: EditState, engine?: TranscribeEngine) => {
+    const project = await loadProject(videoPath, asEngine(engine))
+    if (!project) throw new Error(`No project file to save edits into (${projectPathFor(videoPath, asEngine(engine))} missing)`)
     project.edit = edit
-    await saveProject(project)
+    await saveProject(project, asEngine(engine))
     log('info', 'edit', `saved: ${edit.items.filter((i) => i.removed).length} of ${edit.items.length} items removed`)
   })
 
-  handleIpc(IPC.transcribeStart, async (event, videoPath: string) => {
-    const { key } = await getApiKey(app.getPath('userData'))
-    if (!key) throw new Error('No OpenAI API key configured — set OPENAI_API_KEY or save a key in the app')
+  handleIpc(IPC.transcribeStart, async (event, videoPath: string, engineArg?: TranscribeEngine) => {
+    const engine = asEngine(engineArg)
+    const key = engine === 'api' ? (await getApiKey(app.getPath('userData'))).key : null
+    if (engine === 'api' && !key) {
+      throw new Error('No OpenAI API key configured — set OPENAI_API_KEY or save a key in the app')
+    }
 
-    // Cost gate at the API boundary: nothing reaches OpenAI without an explicit OK.
+    // Confirmation gate: cost for the API (nothing reaches OpenAI without an
+    // explicit OK), time + model download for local — and either way, a
+    // REPLACE warning when that engine's transcript already exists.
     const durationSec = Number((await ffprobeJson(videoPath)).format?.duration ?? 0)
-    const existing = await loadProject(videoPath)
+    const existing = await loadProject(videoPath, engine)
+    const replaceNote = existing?.transcript ? '\n\nThis will REPLACE the existing transcript and reset any edits.' : ''
     const win = BrowserWindow.fromWebContents(event.sender)
     const { response } = await dialog.showMessageBox(win!, {
       type: 'question',
       buttons: ['Cancel', 'Transcribe'],
       defaultId: 1,
       cancelId: 0,
-      message: `Send ${fmtDuration(durationSec)} of audio to OpenAI Whisper?`,
+      message:
+        engine === 'local'
+          ? `Transcribe ${fmtDuration(durationSec)} locally with whisper.cpp?`
+          : `Send ${fmtDuration(durationSec)} of audio to OpenAI Whisper?`,
       detail:
-        `Estimated cost: $${whisperCostUsd(durationSec).toFixed(2)} ($0.006/min).` +
-        (existing?.transcript ? '\n\nThis will REPLACE the existing transcript and reset any edits.' : '')
+        engine === 'local'
+          ? `Free, runs on this Mac (roughly ${fmtDuration(durationSec / 4)}) — audio never leaves your computer.` +
+            (existsSync(modelPathIn(modelsDir)) ? '' : '\n\nFirst run downloads the Whisper model (~1.6 GB).') +
+            replaceNote
+          : `Estimated cost: $${whisperCostUsd(durationSec).toFixed(2)} ($0.006/min).` + replaceNote
     })
     if (response !== 1) return null
 
-    log('info', 'transcribe', `start ${videoPath}`)
+    log('info', 'transcribe', `start ${videoPath} (${engine})`)
     return transcribeVideo(videoPath, {
       cacheDir,
+      modelsDir,
+      engine,
       apiKey: key,
       onProgress: (p: TranscribeProgress) => {
         log('info', 'transcribe', `${p.stage} ${Math.round(p.fraction * 100)}% ${p.message}`)

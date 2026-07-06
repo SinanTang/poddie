@@ -173,6 +173,37 @@
 - Next: wire whisper-cli behind transcribeAudioFile seam (spawn like ffmpeg,
   resolveTool health check, model download on first use, settings toggle).
 
+## Session 2026-07-06 (Phase 6: local whisper.cpp engine implemented)
+- User verified silence auto-trim ✅; requirement added: keep the paid
+  transcript file as reference — local transcription writes a NEW file.
+- Engine toggle (header select, localStorage): api → <video>.poddie.json
+  (untouched), local → <video>.poddie.local.json. Toggle live-switches the
+  loaded project; project load moved into one [videoPath, engine] effect
+  (openVideo no longer loads inline). Autosave carries the engine; flipping
+  clears dirty state so a pending save can't cross project files.
+- resolveTool generalized to whisper-cli (--version health check,
+  PODDIE_WHISPER_CLI override, per-tool install hint).
+- main/whisper-local.ts: probeLocalWhisper → AppInfo.localWhisper (gates the
+  toggle; modelPresent re-probed per appInfo call), ensureModel (HF download,
+  .part+rename, 1 GB sanity floor), transcribeLocalFile (spawn, -l auto -ojf
+  -nfa --dtw <preset from model filename>, progress from stdout timestamps),
+  parseWhisperCppJson (pure): BPE→word reconstruction + SILENCE-SNAPPED ends
+  (empirically required — coarse token ends fake mid-speech gaps: 62/98 fake
+  in win0, 11 would mis-trim ≥0.75 s; snapping to silencedetect bounds → ~0).
+- transcribe.ts split into apiTranscript/localTranscript over one shared
+  extract→probe→save spine; local skips chunking, extracts wav not m4a
+  (whisper-cli reads no m4a); extractAudio gained a format param.
+- Confirmation dialog per engine: cost (api) vs time estimate + 1.6 GB
+  first-download note (local); REPLACE warning checks that engine's file.
+- Model pre-seeded: spike download copied to userData/models (no 1.6 GB
+  re-download for the user).
+- Headless e2e (real 3-min slice): 617 words zh auto-detected, 3.2× realtime,
+  4 gaps ≥0.75 s, .poddie.local.json saves/loads, api file stays null.
+- Tests 115/115 (+13: whisper-local parse/snap/preset 12, project variant 1)
+  ✅ typecheck ✅ lint ✅ build ✅
+- Next: user verifies local transcription in the app UI; then filler-word
+  detection per the agreed Phase 6 order.
+
 ## Test results
 - 2026-07-05: `npm run typecheck` ✅  `npm run lint` ✅  `npm test` ✅ 4/4
   (probe metadata, no-video-stream rejection, mono-16kHz extraction, cache hit)

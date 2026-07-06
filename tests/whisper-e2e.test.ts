@@ -30,6 +30,8 @@ describe.skipIf(!enabled)('Whisper end-to-end on real footage', () => {
     const stages: string[] = []
     const project = await transcribeVideo(slice, {
       cacheDir: join(tmp, 'cache'),
+      modelsDir: join(tmp, 'models'),
+      engine: 'api',
       apiKey: process.env.OPENAI_API_KEY!,
       onProgress: (p) => stages.push(p.stage)
     })
