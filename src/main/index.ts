@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
+import icon from '../../resources/icon.png?asset'
 import { exportMedia, type ExportFormat } from './export'
 import { hasFilter } from './ffmpeg'
 import type { TimeRange } from '../shared/edit'
@@ -40,6 +41,7 @@ function createWindow(): void {
     width: 1280,
     height: 800,
     title: 'Poddie',
+    icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -57,6 +59,9 @@ app.whenReady().then(async () => {
   initLogger(join(app.getPath('userData'), 'logs'))
   process.on('uncaughtException', (err) => logError('uncaught', err))
   process.on('unhandledRejection', (reason) => logError('unhandled-rejection', reason))
+
+  // BrowserWindow's `icon` option is ignored on macOS — the dock icon needs setting explicitly.
+  app.dock?.setIcon(icon)
 
   mediaServer = await startMediaServer()
   const cacheDir = join(app.getPath('userData'), 'cache')

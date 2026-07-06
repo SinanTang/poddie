@@ -4,7 +4,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["node", "vite/client"],
+    "types": ["node", "vite/client", "electron-vite/node"],
     "jsx": "react-jsx",
     "strict": true,
     "noUnusedLocals": true,
