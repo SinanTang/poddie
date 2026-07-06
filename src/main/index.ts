@@ -258,7 +258,15 @@ app.whenReady().then(async () => {
   })
 })
 
+// The media server's lifetime matches the APP, not the window: on macOS the
+// app outlives its last window, and `activate` recreates windows whose <video>
+// still points at the server. Closing it here once left every post-reactivate
+// window with a dead player (see task_plan errors table). Teardown is in
+// will-quit, which the non-darwin app.quit() path reaches too.
 app.on('window-all-closed', () => {
-  mediaServer?.close()
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('will-quit', () => {
+  mediaServer?.close()
 })

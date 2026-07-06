@@ -252,6 +252,26 @@
 - Phase 7 remaining: README; distribution blockers = ffmpeg/whisper-cli not
   bundled (homebrew-only), no Developer ID/notarization (right-click→Open).
 
+## Session 2026-07-06 (packaged-app bug #3: dead video player)
+- User report: packaged app opens now, but after loading a video the player
+  shows nothing (transcript/waveform/metadata all fine — see screenshot).
+- Localized in two probes: app log had ZERO media-server request lines for the
+  session (dev sessions log 206s immediately), then curl → connection refused
+  and `lsof -p <pid> -i` → no listeners: server dead, app alive.
+- Root cause: `window-all-closed` closed the media server; on macOS the app
+  outlives its last window, and dock-reactivate created a new window pointing
+  at the dead port. IPC features unaffected — only the HTTP-served video died.
+  Latent since Phase 3 in dev (nobody closes-then-reactivates a dev window).
+- Fix: server teardown moved to `will-quit` (server lifetime = app lifetime;
+  non-darwin reaches will-quit via app.quit(), one code path).
+- Verified with a repro harness (scratchpad) driving the REAL out/main bundle:
+  probe after launch → RESPONDING, after last-window-close → RESPONDING (was:
+  dead), after activate-recreates-window → RESPONDING; clean quit. Packaged
+  rebuild re-verified: Renderer helper up, server answering. Left running.
+- Docs: errors-table row (lesson: on macOS anything torn down in
+  window-all-closed is missing after every dock-reactivate; probe the server
+  before blaming the client). Tests 115/115 ✅ typecheck ✅ lint ✅
+
 ## Test results
 - 2026-07-05: `npm run typecheck` ✅  `npm run lint` ✅  `npm test` ✅ 4/4
   (probe metadata, no-video-stream rejection, mono-16kHz extraction, cache hit)
