@@ -81,8 +81,9 @@ app → Open**, then confirm, and it launches normally from then on.
 
 1. **Open Video…** — pick an `.mov`/`.mp4`/`.m4v`. iPhone HEVC is auto-converted to an
    H.264 preview proxy (your original is untouched and is what gets exported).
-2. **Choose an engine** (Whisper: Local or API) in the header, then **transcribe**. Local's
-   first run downloads a ~1.6 GB model once. You'll see a cost/time estimate and confirm.
+2. **Choose how to transcribe** in the header — **Local model** (free, private, no key) or
+   **OpenAI API** (paste your key). Local's first run downloads a ~1.6 GB Whisper model once. You'll
+   see a cost/time estimate and confirm.
 3. **Edit** — click a word to seek; drag or shift-click to select, then <kbd>⌫</kbd> to cut
    (press again on a fully-cut selection to restore). Double-click a word to fix its text.
    Use **✂ Trim silences** to bulk-remove dead air.

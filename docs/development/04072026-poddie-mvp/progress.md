@@ -267,6 +267,21 @@
   + can't-clear-env). 118/118 ✅ typecheck ✅ lint ✅ build ✅
 - README key row updated (per-user store, changeable/removable, env wins).
 
+## Session 2026-07-06 (UI: "Transcribe" relabel + a scare that wasn't a bug)
+- Header relabel per user: "Whisper:" → "Transcribe:", options "Local (whisper.cpp)"
+  → "Local model" / "OpenAI API"; the API-key field now shows ONLY in OpenAI API
+  mode (local needs no key). Two empty-state hints de-jargoned ("switch to Local
+  model", "downloads the local model"). README how-to step aligned.
+- Then: user screenshot showed the PACKAGED app as a white page with raw CSS text
+  ("e: 12px; }" = tail of the built stylesheet). Looked like my change broke the
+  build. It hadn't: `npm run build` succeeded, braces balanced, and a harness on
+  out/renderer + CDP (`--remote-debugging-port`) on the packaged binary BOTH showed
+  React mounted, CSS applied (bg rgb(27,29,33)), new labels present. Root cause was
+  a build race — `dist:dir` run while `npm run dev` was live, both writing out/, so
+  the packaged index.html got captured mid-write. Clean rebuild from a quiet tree
+  verified good via CDP. Errors-table entry added (incl. the CDP diagnostic recipe).
+- Tests 118/118 ✅ typecheck ✅ lint ✅ build ✅
+
 ## Session 2026-07-06 (packaged-app bug #3: dead video player)
 - User report: packaged app opens now, but after loading a video the player
   shows nothing (transcript/waveform/metadata all fine — see screenshot).

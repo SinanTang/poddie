@@ -472,15 +472,15 @@ export default function App(): React.JSX.Element {
         )}
         <span className="spacer" />
         <label className="engine-pick" title={appInfo?.localWhisper.hint ?? undefined}>
-          Whisper:
+          Transcribe:
           <select value={engine} onChange={(e) => switchEngine(e.target.value as TranscribeEngine)}>
-            <option value="api">OpenAI API</option>
             <option value="local" disabled={!appInfo?.localWhisper.available}>
-              Local (whisper.cpp)
+              Local model
             </option>
+            <option value="api">OpenAI API</option>
           </select>
         </label>
-        {keyStatus && <ApiKeyBar status={keyStatus} onSaved={setKeyStatus} />}
+        {engine === 'api' && keyStatus && <ApiKeyBar status={keyStatus} onSaved={setKeyStatus} />}
         <button onClick={openVideo} disabled={busy !== null}>
           Open Video…
         </button>
@@ -525,10 +525,10 @@ export default function App(): React.JSX.Element {
                     {engine === 'local' ? 'Transcribe locally (free)' : `Transcribe (~$${costEstimate})`}
                   </button>
                   {engine === 'api' && !keyStatus?.present && (
-                    <p className="hint">Set an OpenAI API key first (top right), or switch Whisper to Local.</p>
+                    <p className="hint">Add an OpenAI API key first (top right), or switch to Local model.</p>
                   )}
                   {engine === 'local' && appInfo && !appInfo.localWhisper.modelPresent && (
-                    <p className="hint">First run downloads the Whisper model (~1.6 GB).</p>
+                    <p className="hint">First run downloads the local model (~1.6 GB).</p>
                   )}
                   {tProgress && busy && (
                     <span className="progress">
