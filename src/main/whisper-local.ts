@@ -188,7 +188,9 @@ export async function ensureModel(modelsDir: string, onProgress: (fraction: numb
   return modelPath
 }
 
-const STDOUT_TIMESTAMP = /--> (\d{2}):(\d{2}):(\d{2})\.(\d{3})\]/
+// `-pp` progress lines land on stderr, which is unbuffered — stdout segment
+// lines arrive in multi-minute block-buffered bursts when piped (looked hung).
+const STDERR_PROGRESS = /whisper_print_progress_callback: progress\s*=\s*(\d+)%/g
 
 /**
  * Run whisper-cli over a wav and return its raw JSON. `-nfa` is mandatory:
@@ -198,11 +200,11 @@ const STDOUT_TIMESTAMP = /--> (\d{2}):(\d{2}):(\d{2})\.(\d{3})\]/
 export async function transcribeLocalFile(
   wavPath: string,
   modelPath: string,
-  onSegmentEnd: (sec: number) => void
+  onProgress: (fraction: number) => void
 ): Promise<CppJson> {
   const bin = await resolveTool('whisper-cli')
   const outBase = `${wavPath}.transcript`
-  const args = ['-m', modelPath, '-f', wavPath, '-l', 'auto', '-ojf', '-of', outBase, '-nfa']
+  const args = ['-m', modelPath, '-f', wavPath, '-l', 'auto', '-ojf', '-of', outBase, '-nfa', '-pp']
   const dtw = dtwPresetFor(modelPath)
   if (dtw) {
     args.push('--dtw', dtw)
@@ -212,16 +214,15 @@ export async function transcribeLocalFile(
 
   log('info', 'whisper-local', `${bin} ${args.join(' ')}`)
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(bin, args)
+    // stdout is discarded (segments come from the JSON file); leaving it piped
+    // but unread would fill the 64 KB pipe buffer and deadlock the child.
+    const child = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe'] })
     let stderrTail = ''
     child.stderr.on('data', (d: Buffer) => {
-      stderrTail = (stderrTail + d.toString()).slice(-2000)
-    })
-    // whisper-cli prints each segment as it decodes — its end timestamp is our progress
-    child.stdout.on('data', (d: Buffer) => {
-      for (const line of d.toString().split('\n')) {
-        const m = STDOUT_TIMESTAMP.exec(line)
-        if (m) onSegmentEnd(Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) + Number(m[4]) / 1000)
+      const chunk = d.toString()
+      stderrTail = (stderrTail + chunk).slice(-2000)
+      for (const m of chunk.matchAll(STDERR_PROGRESS)) {
+        onProgress(Number(m[1]) / 100)
       }
     })
     child.on('error', reject)

@@ -131,6 +131,12 @@ manual region selection.
 - [ ] Use a local LLM (e.g. Qwen3) to edit transcript for filler-word auto-detection, fixing typos, minor corrections and adding punctuations.
   — Feasibility MEDIUM-HIGH with one hard constraint: LLM must NOT return rewritten prose (unalignable). Design: feed indexed tokens per segment, require structured JSON patch ops (setText i / merge i / filler i) → maps 1:1 onto the existing ItemChange model + review UI + undo; timing untouchable by construction. Runtime via Ollama/MLX (Qwen3 8–14B fits this Mac). ~9k tokens per 44-min episode → chunked calls, minutes. Could subsume filler-list detection, but list matching stays as the instant/offline baseline.
 
+## Phase 7: build a distributable open source app
+**Status**: pending
+
+- [ ] Add build and distribute setup for this electron app so that other people can download and use this app too.
+- [ ] Add README.md with instructions on how to download, use and contribute to this beta app. 
+
 
 ## Key Risks
 | Risk | Mitigation |
@@ -150,3 +156,4 @@ manual region selection.
 | Range fix v2 ALSO broke (user: play snaps to 0:00, frozen). Headless repro proved it: `protocol.handle` streamed 206 → `PIPELINE_ERROR_READ: FFmpegDemuxer data source error` on mid-file seek; buffered clamped 206 → Chromium never issues follow-up ranges, seeks snap to EOF. Electron's protocol.handle cannot serve seekable media, period | 3 | **Abandoned custom protocol.** Localhost HTTP media server (127.0.0.1, ephemeral port, per-session token path; media-server.ts) — Chromium's real HTTP stack handles ranges natively. Repro-verified seeks to 600 s and 2500 s resume playback instantly. Lesson: after 2 failed fixes on a platform API, stop patching and swap the platform API; build a minimal repro harness FIRST |
 | Corrupt export "not compatible with QuickTime" (moov atom not found): I edited src/ files DURING an active export → dev `--watch` hot-restarted main → orphaned ffmpeg mid-encode → truncated MP4 (no moov = incomplete) | 1 | Cleaned up; re-exported undisturbed → valid file. RULE: never edit src/ while a user export runs (hot-reload kills it) |
 | Export progress bar stuck at 0% (user). Isolation harness proved ffmpeg -progress + runToolProgress parsing WORK (fractions flowed 1.7→51% in a 30-line repro). Real bug: PUSH delivery — main sent to the `event.sender` captured at start; renderer HMR reload strands that webContents so the live renderer gets nothing. (`-nostats` red herring: chased+cleared; the "0 reports" was a broken /dev/null test) | 3 | Push→POLL: main stores `exportFraction`, renderer polls via invoke every 400 ms (invoke always hits the live handler). The export itself was fine — valid 3.2 GB file; only the readout was broken |
+| Local transcribe looked hung at 19% for 10+ min (user, first real 44-min run). whisper-cli was fine (102% CPU, finished on schedule) — its stdout segment lines, which drove our progress %, are BLOCK-buffered when piped (line-buffered only on a TTY): one burst of ~40 lines in 2 ms, then minutes of silence until the next 4 KB flush | 1 | Parse stderr instead: `-pp` prints `whisper_print_progress_callback: progress = N%` on stderr, which is UNbuffered → smooth 5%-step updates (verified live). stdout now discarded at spawn (`stdio` ignore — an unread pipe would fill 64 KB and deadlock the child). Lesson: never derive progress from a piped child's stdout; use stderr or a file |

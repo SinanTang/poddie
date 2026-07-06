@@ -33,7 +33,7 @@ export async function transcribeVideo(videoPath: string, deps: TranscribeDeps): 
 
   const partial =
     engine === 'local'
-      ? await localTranscript(audioPath, durationSec, deps)
+      ? await localTranscript(audioPath, deps)
       : await apiTranscript(audioPath, sizeBytes, durationSec, deps)
 
   onProgress({ stage: 'saving', message: 'Saving project…', fraction: 0.97 })
@@ -98,7 +98,7 @@ async function apiTranscript(
  * whole wav. Detected silences also repair the coarse token end timestamps
  * (see whisper-local.ts snapToSilences).
  */
-async function localTranscript(audioPath: string, durationSec: number, deps: TranscribeDeps): Promise<TranscriptBody> {
+async function localTranscript(audioPath: string, deps: TranscribeDeps): Promise<TranscriptBody> {
   const { modelsDir, onProgress } = deps
 
   const modelPath = await ensureModel(modelsDir, (fraction) =>
@@ -113,11 +113,11 @@ async function localTranscript(audioPath: string, durationSec: number, deps: Tra
   const silences = await detectSilences(audioPath, 0.25)
 
   onProgress({ stage: 'transcribing', message: 'Transcribing with whisper.cpp…', fraction: 0.18 })
-  const json = await transcribeLocalFile(audioPath, modelPath, (sec) =>
+  const json = await transcribeLocalFile(audioPath, modelPath, (fraction) =>
     onProgress({
       stage: 'transcribing',
-      message: `Transcribing with whisper.cpp (${Math.round((sec / durationSec) * 100)}%)…`,
-      fraction: 0.18 + 0.77 * Math.min(1, sec / durationSec)
+      message: `Transcribing with whisper.cpp (${Math.round(fraction * 100)}%)…`,
+      fraction: 0.18 + 0.77 * Math.min(1, fraction)
     })
   )
 

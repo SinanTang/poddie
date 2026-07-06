@@ -204,6 +204,18 @@
 - Next: user verifies local transcription in the app UI; then filler-word
   detection per the agreed Phase 6 order.
 
+## Session 2026-07-06 (local transcribe: real-episode run + progress fix)
+- User ran the full 44-min episode locally: 9066 words, done in ~12 min
+  (matches the 3.2× realtime estimate), .poddie.local.json written. VERIFIED.
+- But the UI looked hung at 19% for 10+ min → user reported it as stuck.
+  Root cause: progress parsed whisper-cli's stdout segment lines, and stdout
+  is block-buffered when piped — bursts then long silence (errors table).
+- Fix: `-pp` progress on stderr (unbuffered, 5% steps), stdout discarded at
+  spawn so the unread pipe can't fill and deadlock; localTranscript maps the
+  fraction directly (no more duration division).
+- Re-ran headless e2e: progress streamed 15→100% live, same transcript
+  quality (617 words zh, 3.7× realtime). Tests 115/115 ✅ typecheck ✅ lint ✅
+
 ## Test results
 - 2026-07-05: `npm run typecheck` ✅  `npm run lint` ✅  `npm test` ✅ 4/4
   (probe metadata, no-video-stream rejection, mono-16kHz extraction, cache hit)
