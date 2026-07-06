@@ -157,6 +157,22 @@
 - Awaiting user verification: trim silences on the real project + burn-in
   export after app restart
 
+## Session 2026-07-06 (Phase 6: local-Whisper A/B spike — gate PASSED)
+- User verified silence auto-trim ✅ (burn-in export still running, unverified)
+- Spike (no app code touched): 3×180 s windows of the real episode through
+  whisper.cpp large-v3-turbo (+DTW, -nfa) and mlx-whisper large-v3-turbo,
+  scored vs the paid transcript (char alignment) AND vs real audio silences
+  (ffmpeg silencedetect edges = timing ground truth).
+- Result: whisper.cpp tracked real silence edges BETTER than the paid API in
+  all 3 windows (median 126/89/123 ms vs API 202/109/149 ms); text agreement
+  93.6–97.1 %; hallucination parity. mlx-whisper disqualified: silently
+  dropped 28.6 s of speech in one window + needs a Python runtime.
+- Decision: build local mode on whisper.cpp (`whisper-cli`, already installed
+  as ffmpeg-full dep). Keep whisper-1 API path as default/fallback — same
+  WhisperResult contract. Full numbers + integration gotchas in findings.md.
+- Next: wire whisper-cli behind transcribeAudioFile seam (spawn like ffmpeg,
+  resolveTool health check, model download on first use, settings toggle).
+
 ## Test results
 - 2026-07-05: `npm run typecheck` ✅  `npm run lint` ✅  `npm test` ✅ 4/4
   (probe metadata, no-video-stream rejection, mono-16kHz extraction, cache hit)

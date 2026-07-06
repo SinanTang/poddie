@@ -206,6 +206,39 @@
   local-Whisper spike → LLM cleanup (each ships standalone value; the last
   two share a "local models" config surface).
 
+## Local Whisper spike: GATE PASSED, whisper.cpp wins (2026-07-06)
+Method: three 180 s windows (0 / 1200 / 2400 s) of the real 44.5-min episode,
+transcribed by whisper.cpp 1.9.1 (brew `whisper-cli`, ggml-large-v3-turbo
+1.6 GB, `--dtw large.v3.turbo -nfa`) and mlx-whisper (uv, Python 3.12,
+mlx-community/whisper-large-v3-turbo), scored against TWO references:
+(a) char-level alignment vs the paid whisper-1 transcript (tokenization-proof:
+explode words to chars with interpolated times, SequenceMatcher), and
+(b) ground truth — ffmpeg silencedetect edges on the real audio; the nearest
+word boundary of each transcript should meet each real silence edge.
+- **Timing (the gate): local ≥ API.** Silence-edge median error, API vs
+  whisper.cpp per window: 202→126 ms, 109→89 ms, 149→123 ms. whisper.cpp beat
+  the paid API in all three windows. The API transcript is NOT a timing gold
+  standard — pairwise drift vs it (median ~100–160 ms) mostly measures the
+  API's own noise, which is why the silence-edge test exists.
+- **Text: parity.** Char agreement w/ API 97.1 / 93.6 / 97.0 % (whisper.cpp);
+  disagreements are symmetric — locals catch backchannels (是的/就是/真的) the
+  API drops, plus homophone coin-flips (降维/将为) in both directions.
+- **mlx-whisper DISQUALIFIED**: silently skipped 28.6 s of real speech in
+  window 2400 (94.3→122.9 s hole; whisper.cpp transcribed it fine) — classic
+  seek-window skip after a silence. A transcript editor can't tolerate silent
+  content loss. Also drags in a Python/uv/torch runtime vs one brew binary.
+- Hallucination inside real silences (9 min sampled): API 4 tokens,
+  whisper.cpp 5, mlx 0 — all negligible.
+- **whisper.cpp integration facts**: DTW token timestamps REQUIRE `-nfa`
+  (flash-attn, default ON since 1.8.x, silently disables DTW → t_dtw=-1 and
+  coarse offsets: 36→51 % of chars would drift past the 0.15 s cut pad).
+  Speed with -nfa+DTW: 4.4× realtime on M4 Metal → ~10 min per 44-min episode
+  (vs ~1–2 min API, $0.27). JSON via `-ojf`; filter `[_TT_###]`/`[_BEG_]`
+  tokens (match `^\[_.*\]$` — TT tokens do NOT end in `_]`); t_dtw is in
+  CENTIseconds; words must be reconstructed from BPE tokens (CJK ≈ 1–2 chars
+  per token, Latin merges on leading space). No 25 MB limit → chunking module
+  stays API-only. Spike scripts: scratchpad drift.py / silence_edge.py.
+
 ## Open questions (resolve during build, not before)
 - Does wavesurfer 7 handle a 1 h m4a decode fast enough, or do we need
   precomputed peaks? (measure in Phase 3)
