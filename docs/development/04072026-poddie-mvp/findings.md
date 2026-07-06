@@ -249,6 +249,35 @@ word boundary of each transcript should meet each real silence edge.
   on all 3 windows). whisper-1 API word ends don't need this. Implementation:
   parseWhisperCppJson/snapToSilences in src/main/whisper-local.ts.
 
+## Packaging facts (2026-07-06, Phase 7)
+- **Apple Silicon verifies code signatures at exec time** — an invalid/stale
+  signature = silent SIGKILL: no dialog, no crash report, nothing under the
+  app's name in Console. Looks exactly like "click → nothing happens".
+- electron-builder with signing skipped (identity: null / CSC_IDENTITY_AUTO_DISCOVERY=false)
+  leaves the raw Electron template's ad-hoc signature on a bundle it just
+  MODIFIED (asar/Info.plist/icon swapped in) → always invalid → always killed.
+  build/afterPack.cjs re-signs ad-hoc; `xattr -cr` must run first because
+  `com.apple.provenance` xattrs (stamped by macOS on the extracted Electron
+  zip) make codesign refuse with "detritus not allowed".
+- **electron-vite `?asset` imports resolve relative to the app root** — project
+  root in dev, app.asar root in production. Anything imported that way must be
+  inside electron-builder's `files` list or guarded dev-only. Our files list
+  is a deliberate allowlist (out/** + package.json): blocklist defaults would
+  drag multi-GB footage/ into the asar.
+- **Debugging a packaged app that "doesn't launch", in order of yield**:
+  1. Run `Poddie.app/Contents/MacOS/Poddie` directly in a terminal — its
+     stderr named the exact bug in one shot, after hours of signature theory.
+  2. Check for a "Poddie Helper (Renderer)" process — it exists iff a real
+     window/webContents exists. Main + GPU + Network helpers all run happily
+     with ZERO windows (the zombie state that fooled the first verification).
+  3. The app's own log file works in packaged builds too (same userData dir).
+  4. `log show --predicate` for AMFI/syspolicyd — last resort, noisy.
+- `spctl -a` "rejected" is the RESTING state for any un-notarized app and does
+  not predict launch behavior for local unquarantined builds. Don't chase it.
+- Startup ordering rule: nothing cosmetic sits unguarded in the whenReady
+  handler before createWindow(). One decorative throw (dock.setIcon on a
+  missing file) killed IPC + media server + window while dev worked forever.
+
 ## Open questions (resolve during build, not before)
 - Does wavesurfer 7 handle a 1 h m4a decode fast enough, or do we need
   precomputed peaks? (measure in Phase 3)

@@ -219,6 +219,39 @@
   both confirmed working on the real episode. Phase 6 remaining: filler-word
   detection, then local LLM transcript cleanup.
 
+## Session 2026-07-06 (Phase 7: packaging + the two launch bugs)
+- Custom app icon: resources/icon.png (Gemini-generated P/waveform mark,
+  squircle-masked + shadow via scratchpad script — macOS does NOT round icon
+  corners for you; transparent corners must be baked into the PNG). Dev dock
+  icon via app.dock.setIcon; ?asset import needed electron-vite/node in
+  tsconfig types.
+- Packaging: electron-builder (mac dmg; files = ALLOWLIST out/** +
+  package.json, since footage/ is multi-GB), build/icon.png 1024² →
+  auto-.icns, scripts npm run dist / dist:dir. Electron ^36 npm-audit
+  advisory noted as pre-existing, not addressed.
+- Launch bug #1 (click → nothing): skipped signing left the Electron
+  template's STALE ad-hoc signature on the modified bundle; arm64 kills
+  invalid signatures at exec time, silently. Fix: build/afterPack.cjs =
+  xattr -cr (com.apple.provenance blocks codesign) + ad-hoc --deep re-sign.
+- Launch bug #2 (STILL nothing): dock.setIcon threw in the packaged app
+  (resources/icon.png not in the asar — ?asset paths are app-root-relative)
+  → async whenReady handler aborted → process alive, ZERO windows. My earlier
+  "verified" launches were this same zombie: I had checked processes, not
+  windows — "Poddie Helper (Renderer)" absent = no window ever existed.
+  Found in ONE step by running Contents/MacOS/Poddie directly in a terminal
+  (stderr printed the exact error) after Gatekeeper theories went nowhere.
+  Fix: setIcon dev-only (!app.isPackaged) + try/catch+log; BrowserWindow icon
+  option dropped (no-op on macOS); packaged builds use the bundle's icon.icns.
+- VERIFIED properly this time: clean dist:dir rebuild → Renderer helper
+  present, media server up, clean log, window on screen (left running).
+- Docs: task_plan Phase 7 status + 2 errors-table rows; findings.md
+  "Packaging facts" (exec-time signature kills, ?asset resolution, debug
+  order: direct-binary stderr > Renderer-helper check > app log > system log;
+  spctl "rejected" is normal for un-notarized apps — don't chase it).
+- Tests 115/115 ✅ typecheck ✅ lint ✅
+- Phase 7 remaining: README; distribution blockers = ffmpeg/whisper-cli not
+  bundled (homebrew-only), no Developer ID/notarization (right-click→Open).
+
 ## Test results
 - 2026-07-05: `npm run typecheck` ✅  `npm run lint` ✅  `npm test` ✅ 4/4
   (probe metadata, no-video-stream rejection, mono-16kHz extraction, cache hit)

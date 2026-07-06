@@ -43,7 +43,6 @@ function createWindow(): void {
     width: 1280,
     height: 800,
     title: 'Poddie',
-    icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -62,8 +61,17 @@ app.whenReady().then(async () => {
   process.on('uncaughtException', (err) => logError('uncaught', err))
   process.on('unhandledRejection', (reason) => logError('unhandled-rejection', reason))
 
-  // BrowserWindow's `icon` option is ignored on macOS — the dock icon needs setting explicitly.
-  app.dock?.setIcon(icon)
+  // Packaged builds get their icon from the bundle's icon.icns; only the dev
+  // dock needs setting explicitly (BrowserWindow's `icon` option is ignored on
+  // macOS). Cosmetic — must never abort startup: a missing icon file once left
+  // the packaged app running but windowless (see task_plan errors table).
+  if (!app.isPackaged) {
+    try {
+      app.dock?.setIcon(icon)
+    } catch (err) {
+      logError('dock-icon', err)
+    }
+  }
 
   mediaServer = await startMediaServer()
   const cacheDir = join(app.getPath('userData'), 'cache')
