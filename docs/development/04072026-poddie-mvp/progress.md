@@ -215,6 +215,9 @@
   fraction directly (no more duration division).
 - Re-ran headless e2e: progress streamed 15→100% live, same transcript
   quality (617 words zh, 3.7× realtime). Tests 115/115 ✅ typecheck ✅ lint ✅
+- USER-VERIFIED 2026-07-06: local whisper transcription AND caption burn-in
+  both confirmed working on the real episode. Phase 6 remaining: filler-word
+  detection, then local LLM transcript cleanup.
 
 ## Test results
 - 2026-07-05: `npm run typecheck` ✅  `npm run lint` ✅  `npm test` ✅ 4/4
