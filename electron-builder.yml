@@ -1,0 +1,19 @@
+appId: com.poddie.app
+productName: Poddie
+directories:
+  output: dist
+  buildResources: build
+# Allowlist, not a blocklist: this repo has multi-GB files under footage/ and
+# tests/.tmp* that must never end up inside a packaged app.
+files:
+  - out/**/*
+  - package.json
+mac:
+  target:
+    - dmg
+  icon: build/icon.png
+  category: public.app-category.utilities
+  # No Apple Developer ID set up yet — ship unsigned. Gatekeeper will show an
+  # "unidentified developer" warning on first launch (right-click > Open bypasses
+  # it). Add `identity: <Developer ID>` here once/if you get a certificate.
+  identity: null

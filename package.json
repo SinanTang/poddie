@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Transcript-based video podcast editor (local, personal use)",
+  "author": "Sinan Tang",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -10,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src tests",
     "test": "vitest run --exclude tests/whisper-e2e.test.ts",
-    "test:e2e": "PODDIE_E2E=1 vitest run tests/whisper-e2e.test.ts"
+    "test:e2e": "PODDIE_E2E=1 vitest run tests/whisper-e2e.test.ts",
+    "dist": "electron-vite build && electron-builder --mac --publish=never",
+    "dist:dir": "electron-vite build && electron-builder --mac --dir --publish=never"
   },
   "dependencies": {
     "react": "^19.1.0",
@@ -23,6 +26,7 @@
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.5.0",
     "electron": "^36.3.0",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^3.1.0",
     "eslint": "^9.27.0",
     "typescript": "^5.8.0",
