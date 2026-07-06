@@ -139,7 +139,8 @@ manual region selection.
   — build/icon.png (1024², from the rounded dock icon) → electron-builder generates the .icns
   — build/afterPack.cjs: strips xattrs + ad-hoc re-signs the bundle. NOT optional: two distinct launch failures without it (see errors table — stale-signature kill, then windowless setIcon crash)
   — App icon: packaged builds use bundle icon.icns; `app.dock.setIcon` is dev-only (`!app.isPackaged` guard, try/caught — cosmetic ops must never abort startup)
-- [ ] Add README.md with instructions on how to download, use and contribute to this beta app.
+  — Media server lifetime = APP lifetime (teardown moved window-all-closed → will-quit); window-scoped teardown left the video player dead after any dock-reactivate (see errors table)
+- [x] README.md + LICENSE (MIT): install/run-from-source, build .app/.dmg + Gatekeeper right-click→Open, usage walkthrough, file-storage model (sidecar tied to video path + writable-folder requirement), contributing (→ CLAUDE.md + docs/), known limitations. package.json gained license/repository/homepage.
 - [ ] Distribution blockers for other people's machines (currently personal-Mac-only):
   — ffmpeg/ffprobe NOT bundled (resolveTool shells out to homebrew paths); other Macs need `brew install ffmpeg-full` or we bundle ffmpeg-static + lose libass burn-in
   — whisper-cli same story (local transcription silently unavailable without homebrew whisper-cpp; API path still works)

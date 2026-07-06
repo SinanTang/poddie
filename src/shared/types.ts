@@ -101,6 +101,7 @@ export const IPC = {
   extractAudio: 'audio:extract',
   apiKeyStatus: 'apiKey:status',
   apiKeySet: 'apiKey:set',
+  apiKeyClear: 'apiKey:clear',
   projectLoad: 'project:load',
   projectSaveEdit: 'project:saveEdit',
   transcribeStart: 'transcribe:start',
@@ -122,6 +123,8 @@ export interface PoddieApi {
   extractAudio(videoPath: string): Promise<AudioExtractResult>
   getApiKeyStatus(): Promise<ApiKeyStatus>
   setApiKey(key: string): Promise<ApiKeyStatus>
+  /** Remove the stored key (recover from a bad key, or wipe it off a shared machine). */
+  clearApiKey(): Promise<ApiKeyStatus>
   /** Engine selects the project file: api → <video>.poddie.json, local → <video>.poddie.local.json. */
   loadProject(videoPath: string, engine: TranscribeEngine): Promise<Project | null>
   saveEdit(videoPath: string, edit: import('./edit').EditState, engine: TranscribeEngine): Promise<void>

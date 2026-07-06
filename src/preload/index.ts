@@ -7,6 +7,7 @@ const api: PoddieApi = {
   extractAudio: (videoPath) => ipcRenderer.invoke(IPC.extractAudio, videoPath),
   getApiKeyStatus: () => ipcRenderer.invoke(IPC.apiKeyStatus),
   setApiKey: (key) => ipcRenderer.invoke(IPC.apiKeySet, key),
+  clearApiKey: () => ipcRenderer.invoke(IPC.apiKeyClear),
   loadProject: (videoPath, engine) => ipcRenderer.invoke(IPC.projectLoad, videoPath, engine),
   saveEdit: (videoPath, edit, engine) => ipcRenderer.invoke(IPC.projectSaveEdit, videoPath, edit, engine),
   transcribe: (videoPath, engine) => ipcRenderer.invoke(IPC.transcribeStart, videoPath, engine),

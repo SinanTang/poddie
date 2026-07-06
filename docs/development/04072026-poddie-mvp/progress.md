@@ -252,6 +252,21 @@
 - Phase 7 remaining: README; distribution blockers = ffmpeg/whisper-cli not
   bundled (homebrew-only), no Developer ID/notarization (right-click→Open).
 
+## Session 2026-07-06 (BYO API key: change/remove for distributed users)
+- Context: add/use own key already worked (validated sk- regex, 0600 store,
+  env > config precedence, password input, "key saved ✓", transcribe gated on
+  presence). Gap for a distributed beta: once present, ApiKeyBar showed only
+  "key saved ✓" — no way to change/remove. A typo'd/revoked key (passes the
+  format regex, fails at OpenAI) stranded the user in hand-editing config.json.
+- Fix: config.ts clearApiKey (removes stored key; env still wins, can't clear
+  env from app). IPC apiKey:clear + preload clearApiKey + main handler.
+  ApiKeyBar: stored key → "key saved ✓ · Change · Remove"; Change reveals the
+  input (Enter-to-save, Cancel); env-sourced key stays read-only "key env ✓".
+  button.link style added.
+- Tests: +3 config (rejects non-sk, save→clear round-trip, env-wins-over-stored
+  + can't-clear-env). 118/118 ✅ typecheck ✅ lint ✅ build ✅
+- README key row updated (per-user store, changeable/removable, env wins).
+
 ## Session 2026-07-06 (packaged-app bug #3: dead video player)
 - User report: packaged app opens now, but after loading a video the player
   shows nothing (transcript/waveform/metadata all fine — see screenshot).

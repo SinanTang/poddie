@@ -31,9 +31,23 @@ import type {
 function ApiKeyBar({ status, onSaved }: { status: ApiKeyStatus; onSaved: (s: ApiKeyStatus) => void }): React.JSX.Element {
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
 
-  if (status.present) {
-    return <span className="key-status ok">key {status.source === 'env' ? 'env' : 'saved'} ✓</span>
+  // A key from the environment always wins and can't be changed in-app; just show it.
+  if (status.present && status.source === 'env') {
+    return <span className="key-status ok">key env ✓</span>
+  }
+
+  // A stored key stays editable — a typo'd or revoked key must be recoverable
+  // without hand-editing config.json.
+  if (status.present && !editing) {
+    return (
+      <span className="key-status ok">
+        key saved ✓
+        <button className="link" onClick={() => { setDraft(''); setError(null); setEditing(true) }}>Change</button>
+        <button className="link" onClick={async () => onSaved(await window.poddie.clearApiKey())}>Remove</button>
+      </span>
+    )
   }
 
   async function save(): Promise<void> {
@@ -41,6 +55,7 @@ function ApiKeyBar({ status, onSaved }: { status: ApiKeyStatus; onSaved: (s: Api
     try {
       onSaved(await window.poddie.setApiKey(draft))
       setDraft('')
+      setEditing(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -53,10 +68,14 @@ function ApiKeyBar({ status, onSaved }: { status: ApiKeyStatus; onSaved: (s: Api
         placeholder="OpenAI API key (sk-…)"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && draft.trim() !== '' && save()}
       />
       <button onClick={save} disabled={draft.trim() === ''}>
         Save key
       </button>
+      {status.present && (
+        <button className="link" onClick={() => { setEditing(false); setError(null) }}>Cancel</button>
+      )}
       {error && <span className="key-error">{error}</span>}
     </span>
   )

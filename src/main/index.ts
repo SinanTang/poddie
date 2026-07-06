@@ -8,7 +8,7 @@ import { hasFilter } from './ffmpeg'
 import type { TimeRange } from '../shared/edit'
 import { computePeaks, ensurePreviewProxy, extractAudio, ffprobeJson, probeVideo } from './media'
 import { startMediaServer, type MediaServer } from './media-server'
-import { getApiKey, getApiKeyStatus, loadEnvFile, setApiKey } from './config'
+import { clearApiKey, getApiKey, getApiKeyStatus, loadEnvFile, setApiKey } from './config'
 import { loadProject, projectPathFor, saveProject } from './project'
 import type { EditState } from '../shared/edit'
 import { transcribeVideo } from './transcribe'
@@ -119,6 +119,8 @@ app.whenReady().then(async () => {
   handleIpc(IPC.apiKeyStatus, async () => getApiKeyStatus(app.getPath('userData')))
 
   handleIpc(IPC.apiKeySet, async (_event, key: string) => setApiKey(app.getPath('userData'), key))
+
+  handleIpc(IPC.apiKeyClear, async () => clearApiKey(app.getPath('userData')))
 
   handleIpc(IPC.projectLoad, async (_event, videoPath: string, engine?: TranscribeEngine) =>
     loadProject(videoPath, asEngine(engine))

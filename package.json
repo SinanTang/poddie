@@ -4,6 +4,12 @@
   "private": true,
   "description": "Transcript-based video podcast editor (local, personal use)",
   "author": "Sinan Tang",
+  "license": "MIT",
+  "homepage": "https://github.com/electronicbrains/poddie",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/electronicbrains/poddie.git"
+  },
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",

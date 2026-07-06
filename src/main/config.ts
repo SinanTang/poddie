@@ -66,3 +66,16 @@ export async function setApiKey(configDir: string, key: string): Promise<ApiKeyS
   await writeFile(configPath(configDir), JSON.stringify(config, null, 2), { mode: 0o600 })
   return getApiKeyStatus(configDir)
 }
+
+/**
+ * Remove the stored key (recover from a typo'd/revoked key, or wipe it off a
+ * shared machine). Only touches the config file — a key coming from the
+ * OPENAI_API_KEY env var still wins and cannot be cleared from the app.
+ */
+export async function clearApiKey(configDir: string): Promise<ApiKeyStatus> {
+  const config = await readConfig(configDir)
+  delete config.openaiApiKey
+  await mkdir(configDir, { recursive: true })
+  await writeFile(configPath(configDir), JSON.stringify(config, null, 2), { mode: 0o600 })
+  return getApiKeyStatus(configDir)
+}

@@ -453,6 +453,23 @@ input[type='search'] {
   color: #34d399;
   font-size: 12px;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+button.link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #9ca3af;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+button.link:hover {
+  color: #e6e6e6;
 }
 
 .key-entry {
