@@ -18,8 +18,8 @@
     "lint": "eslint src tests",
     "test": "vitest run --exclude tests/whisper-e2e.test.ts",
     "test:e2e": "PODDIE_E2E=1 vitest run tests/whisper-e2e.test.ts",
-    "dist": "electron-vite build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --publish=never",
-    "dist:dir": "electron-vite build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --dir --publish=never"
+    "dist": "electron-vite build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --universal --publish=never",
+    "dist:dir": "electron-vite build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --universal --dir --publish=never"
   },
   "dependencies": {
     "react": "^19.1.0",

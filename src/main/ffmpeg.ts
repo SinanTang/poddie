@@ -28,10 +28,14 @@ export async function resolveTool(tool: Tool): Promise<string> {
   const cached = resolved.get(tool)
   if (cached) return cached
 
+  // Homebrew prefix differs by arch: /opt/homebrew on Apple Silicon, /usr/local
+  // on Intel. Probe both so a universal build works on either. ffmpeg-full is
+  // keg-only (never symlinked into bin) → its keg path must be listed explicitly.
   const override = process.env[`PODDIE_${tool.toUpperCase().replace(/-/g, '_')}`]
   const candidates = [
     override,
     `/opt/homebrew/opt/ffmpeg-full/bin/${tool}`,
+    `/usr/local/opt/ffmpeg-full/bin/${tool}`,
     `/opt/homebrew/bin/${tool}`,
     `/usr/local/bin/${tool}`,
     tool

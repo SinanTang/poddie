@@ -10,6 +10,11 @@ files:
   - package.json
 afterPack: build/afterPack.cjs
 mac:
+  # `--universal` is passed on the CLI (see the dist scripts in package.json) so
+  # it applies to both the dmg and --dir targets. It produces one bundle with
+  # arm64 + x64 slices → runs natively on Apple Silicon AND Intel. Building from
+  # an arm64 Mac downloads both Electron binaries and lipo-merges them (~2× size,
+  # slower build); output lands in dist/mac-universal/.
   target:
     - dmg
   icon: build/icon.png
@@ -18,9 +23,9 @@ mac:
   # npm scripts) stops electron-builder from hunting for a real keychain
   # certificate, but it then SKIPS signing entirely, leaving the raw Electron
   # template's stale signature in place. That's invalid once app.asar/
-  # Info.plist/icon are swapped in, and Apple Silicon refuses to launch a
-  # bundle with an invalid signature. build/afterPack.cjs ad-hoc re-signs the
-  # bundle after packing to fix this. Gatekeeper still shows an "unidentified
-  # developer" warning on first launch (right-click > Open bypasses it). Add
-  # `identity: <Developer ID>` here once/if you get a real certificate — then
-  # the afterPack re-sign is unnecessary (but harmless to leave in).
+  # Info.plist/icon are swapped in, and macOS refuses to launch a bundle with
+  # an invalid signature (strictly enforced on Apple Silicon). build/afterPack.cjs
+  # ad-hoc re-signs the bundle after packing to fix this. Gatekeeper still shows
+  # an "unidentified developer" warning on first launch (right-click > Open
+  # bypasses it). Add `identity: <Developer ID>` here once/if you get a real
+  # certificate — then the afterPack re-sign is unnecessary (but harmless to leave in).

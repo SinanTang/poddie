@@ -267,6 +267,27 @@
   + can't-clear-env). 118/118 ✅ typecheck ✅ lint ✅ build ✅
 - README key row updated (per-user store, changeable/removable, env wins).
 
+## Session 2026-07-06 (Intel Mac support: universal build)
+- Two small changes per the earlier analysis: (1) resolveTool now probes the
+  Intel Homebrew ffmpeg-full keg `/usr/local/opt/ffmpeg-full/bin` next to the
+  arm `/opt/homebrew/...` one (plain ffmpeg/whisper-cli already resolved via
+  /usr/local/bin). (2) Build is UNIVERSAL: `--universal` added to the dist /
+  dist:dir scripts → one bundle, x86_64 + arm64 slices, output dist/mac-universal/.
+- Signing saga (3 rounds, all in the errors table): afterPack re-signing each
+  per-arch temp build broke the lipo merge (identical-SHA error) → skip `-temp`;
+  then codesign --deep re-adds FinderInfo → fails --verify --strict; FinderInfo
+  is baked into Electron frameworks and can't be reliably stripped for ad-hoc
+  universal, but does NOT block launch (AMFI accepts ad-hoc).
+- Verified end to end: `lipo -info` shows x86_64+arm64 in main binary AND
+  Electron Framework; built the universal DMG; copied Poddie.app out of the DMG
+  (drag-to-Applications flow) and launched it via CDP → React mounted, CSS
+  applied (bg rgb(27,29,33)). Intel encoding covered by the existing
+  videotoolbox→libx264 fallback.
+- Docs: README + Known limitations softened from "Apple Silicon only" to
+  "universal, best-tested on Apple Silicon"; CLAUDE.md dist path → mac-universal;
+  errors table saga + Phase 7 marked done. Tests 118/118 ✅ typecheck ✅ lint ✅
+- Real fix for a clean signature = Developer ID + notarization (Phase 7 blocker).
+
 ## Session 2026-07-06 (UI: "Transcribe" relabel + a scare that wasn't a bug)
 - Header relabel per user: "Whisper:" → "Transcribe:", options "Local (whisper.cpp)"
   → "Local model" / "OpenAI API"; the API-key field now shows ONLY in OpenAI API

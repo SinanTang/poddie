@@ -6,9 +6,8 @@
 </div>
 
 > **Beta / personal tool.** Poddie was built for one person's podcast workflow and runs
-> on **Apple Silicon Macs only**. It works well for that, but it is not a polished,
-> notarized, cross-platform product. Expect rough edges, and see
-> [Known limitations](#known-limitations) before relying on it.
+> on **macOS only** (Apple Silicon and Intel via a universal build). Expect rough edges,
+> and see [Known limitations](#known-limitations) before relying on it.
 
 ---
 
@@ -37,15 +36,16 @@ small human-readable JSON file next to the video.
 
 | Requirement | Notes |
 |-------------|-------|
-| **macOS on Apple Silicon** (M1 or newer) | Uses `h264_videotoolbox` and Homebrew's `/opt/homebrew` paths. Intel Macs are untested. |
+| **macOS** (Apple Silicon or Intel) | Distributed as a universal build. Uses `h264_videotoolbox` with a `libx264` software fallback, and probes both Homebrew prefixes (`/opt/homebrew` on Apple Silicon, `/usr/local` on Intel). Best-tested on Apple Silicon. |
 | **Node.js 22+** and npm | To run or build from source. |
 | **ffmpeg** | `brew install ffmpeg-full` recommended — the standard `ffmpeg` bottle works but lacks `libass`, so caption **burn-in** is disabled (SRT export still works). |
 | **whisper.cpp** *(optional)* | `brew install whisper-cpp` — only needed for the free local transcription engine. Without it, the OpenAI API engine still works. |
 | **OpenAI API key** *(optional)* | Only needed for the API transcription engine. Set `OPENAI_API_KEY`, or enter it once in the app. |
 
 > Poddie shells out to system `ffmpeg`/`ffprobe`/`whisper-cli` (it does not bundle them),
-> resolving `ffmpeg-full` → `/opt/homebrew/bin` → `/usr/local/bin` → `PATH`, health-checking
-> each. Override with `PODDIE_FFMPEG`, `PODDIE_FFPROBE`, or `PODDIE_WHISPER_CLI`.
+> preferring the `ffmpeg-full` keg (either Homebrew prefix), then `/opt/homebrew/bin` →
+> `/usr/local/bin` → `PATH`, health-checking each. Override with `PODDIE_FFMPEG`,
+> `PODDIE_FFPROBE`, or `PODDIE_WHISPER_CLI`.
 
 ---
 
@@ -67,11 +67,11 @@ OPENAI_API_KEY=sk-...
 ## Build a distributable app
 
 ```bash
-npm run dist:dir   # unpacked Poddie.app in dist/mac-arm64/ (fast — try this first)
-npm run dist       # a .dmg in dist/
+npm run dist:dir   # unpacked universal Poddie.app in dist/mac-universal/ (try this first)
+npm run dist       # a universal .dmg in dist/
 ```
 
-The build is **ad-hoc signed, not notarized** (no Apple Developer ID). The first time you
+The build is **ad-hoc signed, not notarized**. The first time you
 open it, macOS Gatekeeper will warn about an "unidentified developer" — **right-click the
 app → Open**, then confirm, and it launches normally from then on.
 
@@ -141,7 +141,7 @@ Please open an issue to discuss substantial changes before a PR.
 
 ## Known limitations
 
-- **Apple Silicon macOS only.** No Windows/Linux/Intel builds.
+- **macOS only.** Universal build runs on Apple Silicon and Intel; no Windows/Linux. Best-tested on Apple Silicon.
 - **Depends on Homebrew tools** — `ffmpeg`/`whisper-cli` are not bundled; other users must
   install them (see [Requirements](#requirements)).
 - Tuned for iPhone H.264/HEVC recordings; exotic codecs are untested.
