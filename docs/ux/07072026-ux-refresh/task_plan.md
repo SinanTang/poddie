@@ -27,13 +27,14 @@ Audit with law-by-law violations: see [findings.md](findings.md).
 - [x] Demote "Save key" → ghost ("Re-transcribe" already was). Header "Open Video…" stays primary until Phase 2 moves the primary CTA into the empty state.
 - **Verified**: typecheck + lint + 118/118 tests ✓; static used-vs-defined token cross-check ✓; CDP screenshot of first-run state ✓. Editing/exporting/error states not screenshot-verifiable until Phase 2's `openVideoPath` IPC exists (file dialog can't be driven headlessly) — CSS classes are unchanged, risk covered by the token cross-check; user should eyeball an editing session before Phase 2 starts.
 
-### Phase 2 — First-run experience + header simplification
+### Phase 2 — First-run experience + header simplification ✅ 2026-07-07
 **Laws: Fitts, Jakob, Hick, Proximity, Mental Model**
-- [ ] Empty state: large centered "Open Video" primary CTA + drop-zone affordance ("or drop a .mov/.mp4 here")
-- [ ] Drag-and-drop: `webUtils.getPathForFile` in preload, new `openVideoPath` IPC (types in `shared/types.ts` first → handler in `main/index.ts` → preload), window-level drop target reusing the exact `openVideo()` flow
-- [ ] Move engine picker + API key UI out of the header into a ⚙ settings popover; header becomes: brand · search · spacer · ⚙ · Open Video
-- [ ] Transcribe empty state: keep cost/free labels and hints, restyle with the step framing ("Step 2 — Transcribe")
-- **Verify**: drop a real .mov; open via button; key save/remove/change flows inside popover; engine flip still swaps project files
+- [x] Empty state: dashed drop-zone card with "Step 1 of 3 · Open" label, one-line value prop, big primary "Open Video…" CTA, "or drop a .mov / .mp4" hint
+- [x] Drag-and-drop: `pathForFile` (webUtils) + `openVideoPath` IPC (types → main handler with extension/existence validation → preload); window-level drag handlers with depth-counted enter/leave and a full-window pointer-events-none "Drop to open video" overlay. Dialog and drop share one `loadVideoInfo()` path.
+- [x] Header simplified to: brand · search · spacer · ⚙ · Open Video (now ghost — the empty state owns the primary). Engine picker + ApiKeyBar live in a `SettingsMenu` popover (outside-click + Esc close, aria-haspopup/expanded).
+- [x] Transcribe empty state: "Step 2 of 3 · Transcribe" label, big CTA, hint now points at ⚙ Settings
+- [x] **Bonus bug fix found via screenshot verify**: video pane showed "Edited: 0:00 kept · 0:08 cut" before any transcript existed (`cutSec` = full duration when `items` is null) — now gated on `items`
+- **Verified**: typecheck/lint/118 tests ✓; CDP-driven: first-run, popover open, drag-over overlay, and a real synthetic-mp4 drop → video + waveform + Step 2 state all screenshot-confirmed. Not yet covered: key save/remove flows inside the popover with a real key, engine-flip project-file swap (unchanged code path), HEVC drop needing proxy — user should sanity-check with real iPhone footage.
 
 ### Phase 3 — Editing affordances
 **Laws: Paradox of the Active User, Fitts, Doherty**
@@ -77,7 +78,7 @@ Audit with law-by-law violations: see [findings.md](findings.md).
 
 - [x] Audit complete (findings.md)
 - [x] Phase 1 — tokens + hierarchy (2026-07-07, uncommitted)
-- [ ] Phase 2 — first-run + header
+- [x] Phase 2 — first-run + header (2026-07-07, uncommitted)
 - [ ] Phase 3 — editing affordances
 - [ ] Phase 4 — grouping + feedback
 - [ ] Phase 5 — accessibility + final pass

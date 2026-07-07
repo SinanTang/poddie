@@ -111,15 +111,7 @@ h1 {
   flex: 1;
 }
 
-.engine-pick {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--fs-sm);
-  color: var(--text-muted);
-}
-
-.engine-pick select {
+select {
   background: var(--surface-1);
   color: var(--text);
   border: 1px solid var(--border);
@@ -129,8 +121,63 @@ h1 {
   transition: border-color var(--ease);
 }
 
-.engine-pick select:hover {
+select:hover {
   border-color: var(--border-strong);
+}
+
+/* ---------- settings popover ---------- */
+
+.settings {
+  position: relative;
+  display: flex;
+}
+
+button.icon {
+  padding: 6px 10px;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  width: 300px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  z-index: 50;
+}
+
+.popover-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.popover-label {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.popover-hint {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
+.popover .key-entry {
+  flex-wrap: wrap;
+}
+
+.popover .key-entry input {
+  flex: 1;
+  min-width: 0;
+  width: auto;
 }
 
 /* ---------- buttons: primary (default) / ghost / link ---------- */
@@ -556,6 +603,46 @@ input[type='search']:focus {
   justify-content: center;
   gap: 14px;
   padding: 40px;
+}
+
+/* ---------- first-run drop zone + pipeline steps ---------- */
+
+.drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  border: 2px dashed var(--border-strong);
+  border-radius: 12px;
+  padding: 48px 64px;
+}
+
+.step-label {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+button.big {
+  padding: 12px 28px;
+  font-size: var(--fs-lg);
+}
+
+/* full-window feedback while a file drag is over the app — pointer-events:none
+   keeps the drop landing on the root handler */
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(27, 29, 33, 0.72);
+  border: 2px dashed var(--accent);
+  font-size: var(--fs-lg);
+  color: var(--text);
 }
 
 .progress {
