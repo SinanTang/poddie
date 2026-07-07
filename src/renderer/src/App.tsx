@@ -606,8 +606,13 @@ export default function App(): React.JSX.Element {
 
       {error && (
         <div className="error">
-          {error}
-          {appInfo && <div className="error-hint">Full details: {appInfo.logPath}</div>}
+          <div className="error-body">
+            {error}
+            {appInfo && <div className="error-hint">Full details: {appInfo.logPath}</div>}
+          </div>
+          <button className="error-close" onClick={() => setError(null)} title="Dismiss">
+            ✕
+          </button>
         </div>
       )}
 

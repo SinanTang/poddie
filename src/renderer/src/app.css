@@ -227,7 +227,7 @@ button.small {
 button.link {
   background: none;
   border: none;
-  padding: 0;
+  padding: var(--space-1);
   color: var(--text-muted);
   font-size: var(--fs-sm);
   text-decoration: underline;
@@ -276,7 +276,7 @@ input[type='search']:focus {
 }
 
 .search button {
-  padding: var(--space-1) 10px;
+  padding: 6px var(--space-3);
   font-size: 14px;
 }
 
@@ -392,12 +392,35 @@ input[type='search']:focus {
 }
 
 .transcript-scroll {
+  position: relative; /* anchors .sel-toolbar in content coordinates */
   flex: 1;
   overflow-y: auto;
   padding: var(--space-3) 24px 40vh;
   font-size: var(--fs-lg);
   line-height: 1.9;
   user-select: none;
+}
+
+/* floating cut/restore toolbar near the selection — the mouse path to ⌫ */
+.sel-toolbar {
+  position: absolute;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 3px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  font-size: var(--fs-sm);
+  line-height: normal;
+}
+
+.kbd-hint {
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+  padding-right: var(--space-1);
 }
 
 .para {
@@ -568,11 +591,33 @@ input[type='search']:focus {
 /* ---------- misc ---------- */
 
 .error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
   background: var(--danger-bg);
   padding: var(--space-2) var(--space-4);
   white-space: pre-wrap;
   font-size: var(--fs-md);
   flex-shrink: 0;
+}
+
+.error-body {
+  flex: 1;
+  min-width: 0;
+}
+
+button.error-close {
+  background: none;
+  border: none;
+  padding: 0 var(--space-1);
+  color: var(--danger-soft);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+button.error-close:hover:not(:disabled) {
+  background: none;
+  color: #fff;
 }
 
 .error-hint {
