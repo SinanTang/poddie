@@ -70,7 +70,7 @@ function ApiKeyBar({ status, onSaved }: { status: ApiKeyStatus; onSaved: (s: Api
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && draft.trim() !== '' && save()}
       />
-      <button onClick={save} disabled={draft.trim() === ''}>
+      <button className="ghost" onClick={save} disabled={draft.trim() === ''}>
         Save key
       </button>
       {status.present && (
