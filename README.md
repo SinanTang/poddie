@@ -1,34 +1,40 @@
 <div align="center">
   <img src="resources/icon.png" alt="Poddie" width="128" height="128" />
   <h1>Poddie</h1>
-  <p><strong>Edit your video podcast by editing its transcript.</strong></p>
-  <p><em>A local, transcript-based video editor for macOS — Descript-style, but on your own machine.</em></p>
+  <p><strong>Text-based Video Podcast Editor.</strong></p>
+  <p><em>Cut videos by deleting words — local, private, and free, all on your Mac.</em></p>
 </div>
 
-> **Beta / personal tool.** Poddie was built for one person's podcast workflow and runs
-> on **macOS only** (Apple Silicon and Intel via a universal build). Expect rough edges,
-> and see [Known limitations](#known-limitations) before relying on it.
+<div align="center">
+
+**🔒 100% local & private** · **💸 Free transcription** · **🔇 Silence auto-trim** · **💬 Caption burn-in** · **🎬 One-click export**
+
+</div>
 
 ---
 
-## What it does
+Poddie turns video editing into text editing. Import a recording, get a word-level
+transcript, then **delete the words you don't want**, and Poddie cuts the video to match. What takes an hour of timeline scrubbing now takes minutes of proofreading.
 
-Import a video, transcribe it to a word-level transcript, then edit the video *by editing
-the words* — delete a sentence in the transcript and the corresponding video is cut. No
-timeline scrubbing required.
+Built for podcasters and creators who don't have time to edit their footage.
 
-- **Transcribe** with either OpenAI's Whisper API (fast, ~$0.006/min) or a **fully local**
-  model via whisper.cpp (free, private, ~4× realtime). Handles Chinese, English, and mixed.
-- **Edit by deleting words** — select words or silences in the transcript, press delete.
-  Removed spans are cut from the export. Undo/redo throughout.
-- **Trim silences** in one click, and **fix Whisper mis-splits** by editing token text
-  in place (display-only — never shifts your cuts).
-- **Live preview** that skips your cuts without re-encoding, with a zoomable waveform.
-- **Export** the cut video (MP4/H.264/AAC), audio only (M4A/MP3), or captions (SRT sidecar,
-  or burned in when your ffmpeg has libass).
+- 🎙️ **Transcribe free & offline** with a local Whisper model — or use OpenAI's API
+  (~$0.006/min) when you want it faster.
+- ✂️ **Edit by deleting words** — select words or silences, hit delete, done. Full undo/redo.
+- 🔇 **Silence auto-trim** — strip dead air across the whole episode in one click, no
+  hunting for gaps.
+- ▶️ **Preview instantly** — the player skips your cuts live, no re-encoding, with a
+  zoomable waveform for frame-precise selections.
+- 💬 **Caption burn-in** — generate captions from your transcript and burn them straight
+  into the video. The kind of subtitle feature other editors put behind a subscription.
+- 📤 **Export anything** — cut video (MP4), audio-only podcast (M4A/MP3), or captions as a
+  standalone SRT file.
 
-Editing is **non-destructive**: your source video is never modified. Edits are saved as a
-small human-readable JSON file next to the video.
+No lock-in, no hidden database, no cloud.
+
+> **Beta / personal tool.** Poddie was built for one person's podcast workflow and runs
+> on **macOS only**. Expect rough edges,
+> and see [Known limitations](#known-limitations) before relying on it.
 
 ---
 
