@@ -1,6 +1,6 @@
 <div align="center">
   <img src="resources/icon.png" alt="Poddie" width="128" height="128" />
-  <h1>Poddie</h1>
+  <h1>Poddie <sup>⎨beta⎬</sup></h1>
   <p><strong>Text-based Video Podcast Editor.</strong></p>
   <p><em>Cut videos by deleting words — local, private, and free, all on your Mac.</em></p>
 </div>
