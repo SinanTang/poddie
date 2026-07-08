@@ -34,3 +34,19 @@
   table, data model, Phases 1/3/4 and risks rewritten for the v6 design.
 - Next: Phase 1 (shared/cleanup.ts pure core + tests), using spike6's prompt,
   schema, matcher, and transcripts as fixtures.
+
+## Session 2026-07-08 (cont.) — Phase 1 complete
+- src/shared/cleanup.ts: Suggestion union, findFillerSuggestions,
+  segmentAnchors, punctBatches/serializePunctBatch/mapPunctAnswers,
+  suggestionChanges, PUNCT_SYSTEM/PUNCT_FORMAT (spike v6 contract).
+- tests/cleanup.test.ts: 17 tests — matcher (longest-first, CJK char-tokens,
+  case-insensitive Latin multi-word, gap/removed/blank blocking, no overlap),
+  anchors (start-time assignment, skip dead words, null), batching (numbering,
+  skip punctuated, edits reflected), answer mapping (drop out-of-range/dup/
+  unknown/stale), apply (keptRanges invariant, undo round-trip, stale skips).
+- Note: node_modules was missing in this checkout (fresh clone?) — first
+  `npx vitest` silently downloaded vitest 4.x instead of the project's 3.x;
+  ran `npm install` and re-verified on project versions (135 pass, tsc+eslint
+  clean).
+- Next: Phase 2 — review UI + filler-list path in the renderer (toolbar
+  "Find fillers", review panel, apply as one undo step, user check).

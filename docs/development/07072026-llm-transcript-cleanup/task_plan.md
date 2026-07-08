@@ -98,11 +98,12 @@ interface Suggestion {
 - [x] **GATE (as re-scoped by its own fail path): coverage 100% (≥90% ✓), punct placement ~80–85% acceptable (✓ with review UI in the loop), projected wall-clock ~17 min (≤20 ✓)**
 
 ### Phase 1: Pure core (shared/cleanup.ts)
-**Status**: pending
-- [ ] Suggestion model + `suggestionChanges` → ItemChange[] via textEditChanges (punct append) / toggleRangeChanges (filler removal); invariant test: punct suggestions leave keptRanges deep-equal (byte-identical export)
-- [ ] `segmentAnchors`: segment → last-word-item index by time (skip empty/blanked/removed-word segments; unit-test the edge cases: segment boundaries between gaps, blanked merge leftovers)
-- [ ] Punct batch serializer (numbered segment texts) + answer mapper (unknown numbers dropped, unanswered = no-op, stale-text answers dropped) — pure, testable without Ollama (spike6 transcripts as fixtures)
-- [ ] Filler-list detector: generic token-sequence matcher over ONE flat configurable list (default ships zh+en entries; any language's entries plug in as data), all entries always active (mixed transcripts), longest-match-first → Suggestion[] (port from spike6, add tests)
+**Status**: complete ✅ (2026-07-08 — 17 unit tests; 135 total pass, typecheck + lint clean)
+- [x] Suggestion model (discriminated union PunctSuggestion | FillerSuggestion) + `suggestionChanges` → ItemChange[] via textEditChanges (punct append) / toggleRangeChanges (filler removal); invariant test: punct leaves keptRanges AND every start/end/removed deep-equal; combined punct+filler set round-trips through applyChanges next/prev
+- [x] `segmentAnchors`: single forward pass assigning words to segments by START times (no end/overlap ambiguity) → last live word per segment; removed/blanked words skipped, empty segment → null
+- [x] Punct batching: continuous numbering across batches, skips empty + already-punctuated anchors, segment text rebuilt from CURRENT items (reflects user edits); `serializePunctBatch` (`n|text` lines); `mapPunctAnswers` drops out-of-range/duplicate/unknown-mark/stale-anchor answers, empty mark = no-op. PUNCT_SYSTEM prompt + PUNCT_FORMAT schema (spike v6, `add` required+enum'd) exported for main/llm.ts
+- [x] Filler-list detector: script-blind longest-match-first token-sequence scan over runs of live words — gap/removed/blanked items break the run (never cut across an audible pause or a hand-edited region); one flat configurable list, zh+en defaults; bracketed context previews
+- Staleness design: suggestions carry the text they saw (anchorText / span text); apply re-checks against current items and silently skips mismatches — callers can diff counts for the UI
 
 ### Phase 2: Review UI + filler-list path (ships standalone)
 **Status**: pending
