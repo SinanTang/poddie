@@ -326,16 +326,64 @@ input[type='search']:focus {
   background: var(--surface-1);
   border-radius: var(--radius-lg);
   padding: 20px 14px;
-  font-size: var(--fs-md);
-  color: var(--text-muted);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 
-.proxy-progress progress,
-.progress progress {
+/* ---------- video-pane cards (common region) ---------- */
+
+.card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 10px var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.card-title {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ---------- the one progress pattern ---------- */
+
+progress {
+  accent-color: var(--accent);
+}
+
+.progress-line {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.progress-line-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.progress-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress-pct {
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-line progress {
   width: 100%;
+}
+
+.empty-progress {
+  width: min(420px, 80%);
 }
 
 /* ---------- transcript ---------- */
@@ -525,13 +573,6 @@ input[type='search']:focus {
   color: var(--warning);
 }
 
-.export-block {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding-top: var(--space-1);
-}
-
 .burnin {
   display: inline-flex;
   align-items: center;
@@ -547,12 +588,19 @@ input[type='search']:focus {
   cursor: default;
 }
 
-.export-result {
+/* export success — the peak-end moment of the whole pipeline */
+.export-success {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   gap: var(--space-2);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.08);
+  border-radius: var(--radius);
+  padding: var(--space-2) 10px;
   color: var(--success);
   font-size: var(--fs-sm);
+  word-break: break-all;
 }
 
 /* ---------- waveform footer ---------- */
@@ -688,14 +736,6 @@ button.big {
   border: 2px dashed var(--accent);
   font-size: var(--fs-lg);
   color: var(--text);
-}
-
-.progress {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
 }
 
 .key-status.ok {

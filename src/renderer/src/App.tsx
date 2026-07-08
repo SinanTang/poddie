@@ -57,7 +57,7 @@ function ApiKeyBar({ status, onSaved }: { status: ApiKeyStatus; onSaved: (s: Api
       setDraft('')
       setEditing(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(errText(err))
     }
   }
 
@@ -155,6 +155,38 @@ function SettingsMenu({
   )
 }
 
+/** The one progress pattern for every long-running job (proxy, transcribe, export). */
+function ProgressLine({
+  label,
+  fraction,
+  onCancel
+}: {
+  label: string
+  fraction: number
+  onCancel?: () => void
+}): React.JSX.Element {
+  return (
+    <div className="progress-line">
+      <div className="progress-line-head">
+        <span className="progress-label">{label}</span>
+        <span className="progress-pct">{Math.round(fraction * 100)}%</span>
+        {onCancel && (
+          <button className="ghost small" onClick={onCancel}>
+            Cancel
+          </button>
+        )}
+      </div>
+      <progress value={fraction} max={1} />
+    </div>
+  )
+}
+
+/** Human-readable message: strips Electron's "Error invoking remote method '…':" wrapper. */
+function errText(err: unknown): string {
+  const s = err instanceof Error ? err.message : String(err)
+  return s.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
+}
+
 type ProxyState = { status: 'none' | 'preparing' | 'ready'; path: string | null; fraction: number }
 
 export type SaveStatus =
@@ -237,7 +269,7 @@ export default function App(): React.JSX.Element {
       .then((p) => {
         if (!stale) setProject(p)
       })
-      .catch((err) => setError(`Could not load project: ${err instanceof Error ? err.message : String(err)}`))
+      .catch((err) => setError(`Could not load project: ${errText(err)}`))
     return () => {
       stale = true
     }
@@ -350,7 +382,7 @@ export default function App(): React.JSX.Element {
         .then(() => setSaveStatus({ state: 'saved', at: new Date().toLocaleTimeString() }))
         .catch((err) => {
           setSaveStatus({ state: 'failed' })
-          setError(`Autosave failed: ${err instanceof Error ? err.message : String(err)}`)
+          setError(`Autosave failed: ${errText(err)}`)
         })
     }, 800)
     return () => clearTimeout(timer)
@@ -407,14 +439,14 @@ export default function App(): React.JSX.Element {
     window.poddie
       .getPeaks(info.path)
       .then(setPeaks)
-      .catch((err) => setError(`Waveform unavailable: ${err instanceof Error ? err.message : String(err)}`))
+      .catch((err) => setError(`Waveform unavailable: ${errText(err)}`))
     if (info.needsProxy) {
       window.poddie
         .ensureProxy(info.path)
         .then(({ proxyPath }) => setProxy({ status: 'ready', path: proxyPath, fraction: 1 }))
         .catch((err) => {
           setProxy({ status: 'none', path: null, fraction: 0 })
-          setError(`Preview proxy failed: ${err instanceof Error ? err.message : String(err)}`)
+          setError(`Preview proxy failed: ${errText(err)}`)
         })
     }
   }
@@ -426,7 +458,7 @@ export default function App(): React.JSX.Element {
       const info = await window.poddie.selectVideo()
       if (info) loadVideoInfo(info)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(errText(err))
     } finally {
       setBusy(null)
     }
@@ -438,7 +470,7 @@ export default function App(): React.JSX.Element {
     try {
       loadVideoInfo(await window.poddie.openVideoPath(path))
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(errText(err))
     } finally {
       setBusy(null)
     }
@@ -452,7 +484,7 @@ export default function App(): React.JSX.Element {
       const result = await window.poddie.transcribe(video.path, engine)
       if (result) setProject(result) // null = user canceled the confirmation dialog
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(errText(err))
       setTProgress(null)
     } finally {
       setBusy(null)
@@ -476,7 +508,7 @@ export default function App(): React.JSX.Element {
       const result = await window.poddie.exportMedia(video.path, kept, kind, burnInSrt)
       if (result) setExportResult(result.outPath) // null = dialog or mid-export cancel
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(errText(err))
     } finally {
       setExporting(null)
     }
@@ -494,7 +526,7 @@ export default function App(): React.JSX.Element {
       const result = await window.poddie.exportCaptions(video.path, srt)
       if (result) setExportResult(result.outPath)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(errText(err))
     }
   }
 
@@ -656,9 +688,9 @@ export default function App(): React.JSX.Element {
                     <p className="hint">First run downloads the local model (~1.6 GB).</p>
                   )}
                   {tProgress && busy && (
-                    <span className="progress">
-                      <progress value={tProgress.fraction} max={1} /> {tProgress.message}
-                    </span>
+                    <div className="empty-progress">
+                      <ProgressLine label={tProgress.message} fraction={tProgress.fraction} />
+                    </div>
                   )}
                 </div>
               )}
@@ -669,40 +701,35 @@ export default function App(): React.JSX.Element {
                 <video ref={setVideoEl} key={playerSrc} className="player" controls src={playerSrc} />
               ) : (
                 <div className="proxy-progress">
-                  <p>Preparing preview…</p>
-                  <progress value={proxy.fraction} max={1} />
+                  <ProgressLine label="Preparing preview…" fraction={proxy.fraction} />
                 </div>
               )}
-              <div className="meta-compact">
-                <div>{video.path.split('/').pop()}</div>
-                <div>
-                  {fmtDuration(video.durationSec)} · {video.width}×{video.height} · {video.videoCodec}
-                  {video.needsProxy && ' (proxy preview)'} · {fmtBytes(video.sizeBytes)}
-                </div>
-                {transcript && (
+
+              <div className="card">
+                <div className="card-title">Media</div>
+                <div className="meta-compact">
+                  <div>{video.path.split('/').pop()}</div>
                   <div>
-                    {transcript.words.length.toLocaleString()} tokens · {transcript.language}
-                    {transcript.costUsd != null && ` · $${transcript.costUsd.toFixed(2)}`}
+                    {fmtDuration(video.durationSec)} · {video.width}×{video.height} · {video.videoCodec}
+                    {video.needsProxy && ' (proxy preview)'} · {fmtBytes(video.sizeBytes)}
                   </div>
-                )}
-                {items && cutSec > 0.05 && (
-                  <div className="edit-summary">
-                    Edited: {fmtDuration(keptSec)} kept · {fmtDuration(cutSec)} cut
-                  </div>
-                )}
+                </div>
               </div>
+
               {items && (
-                <div className="export-block">
+                <div className="card">
+                  <div className="card-title">Export</div>
+                  {cutSec > 0.05 && (
+                    <div className="edit-summary">
+                      {fmtDuration(keptSec)} kept · {fmtDuration(cutSec)} cut
+                    </div>
+                  )}
                   {exporting ? (
-                    <>
-                      <span className="progress">
-                        <progress value={exporting.fraction} max={1} /> Exporting…{' '}
-                        {Math.round(exporting.fraction * 100)}%
-                      </span>
-                      <button className="ghost small" onClick={() => void window.poddie.cancelExport()}>
-                        Cancel
-                      </button>
-                    </>
+                    <ProgressLine
+                      label="Exporting…"
+                      fraction={exporting.fraction}
+                      onCancel={() => void window.poddie.cancelExport()}
+                    />
                   ) : (
                     <>
                       <label
@@ -743,8 +770,8 @@ export default function App(): React.JSX.Element {
                     </>
                   )}
                   {exportResult && (
-                    <div className="export-result">
-                      ✓ Exported
+                    <div className="export-success">
+                      <span>✓ Exported {exportResult.split('/').pop()}</span>
                       <button className="ghost small" onClick={() => void window.poddie.revealFile(exportResult)}>
                         Show in Finder
                       </button>
@@ -752,19 +779,25 @@ export default function App(): React.JSX.Element {
                   )}
                 </div>
               )}
+
               {transcript && (
-                <button
-                  className="ghost small"
-                  onClick={transcribe}
-                  disabled={busy !== null || exporting !== null || (engine === 'api' && !keyStatus?.present)}
-                >
-                  Re-transcribe…
-                </button>
-              )}
-              {tProgress && busy && transcript && (
-                <span className="progress">
-                  <progress value={tProgress.fraction} max={1} /> {tProgress.message}
-                </span>
+                <div className="card">
+                  <div className="card-title">Transcription</div>
+                  <div className="meta-compact">
+                    <div>
+                      {transcript.words.length.toLocaleString()} tokens · {transcript.language}
+                      {transcript.costUsd != null && ` · $${transcript.costUsd.toFixed(2)}`}
+                    </div>
+                  </div>
+                  <button
+                    className="ghost small"
+                    onClick={transcribe}
+                    disabled={busy !== null || exporting !== null || (engine === 'api' && !keyStatus?.present)}
+                  >
+                    Re-transcribe…
+                  </button>
+                  {tProgress && busy && <ProgressLine label={tProgress.message} fraction={tProgress.fraction} />}
+                </div>
               )}
             </aside>
           </div>

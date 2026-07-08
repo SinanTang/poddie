@@ -28,6 +28,32 @@
 - **Bug found by screenshot verification** (pre-existing): "Edited: 0:00 kept · 0:08 cut" shown for a freshly opened, never-transcribed video — `cutSec` defaulted to full duration with `items === null`. Fixed by gating the summary on `items`.
 - **CDP verification** (drove the real app; scripts in session scratchpad): `Input.dispatchDragEvent` with `data.files` works against Electron 43 — simulated a genuine file drop of a synthetic ffmpeg-generated mp4. Screenshots confirmed: first-run drop zone, settings popover, drag-over overlay, and post-drop workspace (video meta + preview + waveform + Step 2 CTA, no phantom "Edited" line).
 
+## Session 2026-07-08 — Phase 3 implemented
+
+- **Floating selection toolbar** (TranscriptView): appears above the selection focus after mouseup (hidden while dragging via a `dragging` state mirror of `draggingRef`), positioned in `.transcript-scroll` content coordinates (container is now `position: relative`, so it scrolls with the text). Shows "✂ Cut N" or "Restore N" + a ⌫ hint — N and the verb come from `toggleRangeChanges()` itself, so the button can never disagree with what the Delete key would do. Mouse-only users can finally cut.
+- **Dismissible error banner**: `.error-body` + ✕ button. Also added `errText()` to strip Electron's `Error invoking remote method '…': Error:` prefix — the banner used to show raw IPC plumbing; now it shows "Not a supported video: hosts (need .mov, .mp4 or .m4v)". Replaced 10 inline `err instanceof Error ? …` copies. (Gotcha logged: a replace-all of that pattern also rewrote the helper's own body into infinite recursion — caught immediately, fixed.)
+- **Contextual hint + hit areas**: selection hint now teaches ⇧click/⌫/Esc; search ‹ › and `.link` buttons got larger padding.
+- **Verification approach worth remembering**: hand-crafted `drop-test.mp4.poddie.local.json` next to the synthetic mp4 (loadProject validates only `version`), so a CDP drop loads a full editing session headlessly — no Whisper needed. Real mouse-event drag selection via `Input.dispatchMouseEvent`. The app's own autosave then rewrote the project file with the 5 cut words — end-to-end proof of the edit path.
+
+## Session 2026-07-08 (cont.) — Phase 4 implemented
+
+- Video pane restructured into three `.card` regions (Media / Export / Transcription), each with an uppercase `.card-title` matching the `.step-label` treatment. Re-transcribe now lives inside the Transcription card next to the transcript stats; the kept·cut summary moved into the Export card, directly above the buttons it informs.
+- New `ProgressLine` component is the single progress pattern app-wide: truncating label, tabular-nums percentage, optional Cancel, full-width bar. Replaced four divergent renderings (proxy prep, transcribe ×2, export). Removed the now-dead `.progress`, `.export-block`, `.export-result` CSS.
+- Export success upgraded from a 12px line to a success-tinted `.export-success` card with the output filename and Show in Finder.
+- CDP screenshot confirms the card layout with a real cut project: one blue primary per view, clear group boundaries, correct kept·cut chip.
+
+## Test results (Phase 4)
+
+- `npm run typecheck` ✓ · `npm run lint` ✓ · `npm test` 118/118 ✓ · CSS token cross-check ✓
+- Card layout screenshot ✓. Not headlessly reachable: `.export-success` card and live export progress (need the native save dialog) — user should run one real export with the dev server stopped; ffmpeg export logic itself is unit-tested with real ffmpeg.
+
+## Test results (Phase 3)
+
+- `npm run typecheck` ✓ · `npm run lint` ✓ · `npm test` 118/118 ✓
+- CDP: drag-select 5 words → "✂ Cut 5" → click → 5 tokens struck through, waveform red-shades the cut, export label drops to 0:05, edit summary correct → toolbar flips to "Restore 5" ✓
+- Unsupported drop → clean error text → ✕ dismisses, banner gone, editing state intact ✓
+- Untested headlessly: toolbar position at the very top line of a long transcript (below-fallback logic), CJK tokens under the toolbar (pure display — low risk).
+
 ## Test results (Phase 2)
 
 - `npm run typecheck` ✓ · `npm run lint` ✓ · `npm test` 118/118 ✓

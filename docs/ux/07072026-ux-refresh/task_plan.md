@@ -36,19 +36,20 @@ Audit with law-by-law violations: see [findings.md](findings.md).
 - [x] **Bonus bug fix found via screenshot verify**: video pane showed "Edited: 0:00 kept · 0:08 cut" before any transcript existed (`cutSec` = full duration when `items` is null) — now gated on `items`
 - **Verified**: typecheck/lint/118 tests ✓; CDP-driven: first-run, popover open, drag-over overlay, and a real synthetic-mp4 drop → video + waveform + Step 2 state all screenshot-confirmed. Not yet covered: key save/remove flows inside the popover with a real key, engine-flip project-file swap (unchanged code path), HEVC drop needing proxy — user should sanity-check with real iPhone footage.
 
-### Phase 3 — Editing affordances
+### Phase 3 — Editing affordances ✅ 2026-07-08
 **Laws: Paradox of the Active User, Fitts, Doherty**
-- [ ] Floating selection toolbar anchored near the selection: "✂ Cut (⌫)" / "Restore (⌫)" (+ word count) — makes mouse-only cutting possible; ⌫ path untouched
-- [ ] Error banner: add ✕ dismiss button (fix: currently only clears on next action)
-- [ ] Contextual toolbar hint: show interaction hints only while relevant (selection active vs idle); slightly larger hit areas for search ‹ › and key `.link` buttons
-- **Verify**: mouse-only cut/restore round-trip; ⌫ still works; hint changes with selection state
+- [x] Floating selection toolbar (`.sel-toolbar` in TranscriptView): "✂ Cut N" / "Restore N" + ⌫ kbd hint, anchored above the selection focus (falls below near the top), hidden mid-drag. Label/count derive from the same pure `toggleRangeChanges()` the ⌫ key uses — one semantics, two input paths. Button blurs itself after click so Space stays on the video.
+- [x] Error banner: flex layout with `.error-body` + ✕ `.error-close` dismiss
+- [x] Contextual hint: selection-active copy is now "⇧click extends · ⌫ cuts or restores · Esc clears"; bigger hit areas for search ‹ › and `.link` buttons
+- [x] **Bonus**: `errText()` helper strips Electron's "Error invoking remote method '…':" wrapper from every renderer error message (was leaking raw IPC noise into the banner); DRY'd 10 inline copies of the same ternary
+- **Verified**: typecheck/lint/tests ✓. CDP-driven with a hand-crafted `.poddie.local.json` next to the synthetic video: real mouse drag-selection over 5 words → toolbar "✂ Cut 5" → click → strikethrough + waveform red shading + "Export 0:05 video…" + correct edit summary → toolbar flips to "Restore 5"; autosave persisted the cut to the project file (full applyEdit→saveEdit path). Unsupported-file drop → clean banner text → ✕ dismisses; editing state survives the failed drop.
 
-### Phase 4 — Grouping + feedback polish
+### Phase 4 — Grouping + feedback polish ✅ 2026-07-08
 **Laws: Common Region, Chunking, Peak-End, Goal-Gradient**
-- [ ] Video pane: chunk into bounded cards — Media info / Export / Transcription; move "Re-transcribe…" into the Transcription group
-- [ ] Export success: clear peak-end moment — filename + duration exported + "Show in Finder" in a success card (CSS-only emphasis, no animation library)
-- [ ] Unify the three progress displays (proxy, transcribe, export) into one visual pattern
-- **Verify**: full export round-trip (video, audio, srt) — run export only with dev server stopped or via packaged build (CLAUDE.md rule)
+- [x] Video pane chunked into three bordered `.card`s with uppercase micro-titles: **Media** (filename, dims/codec/size) / **Export** (kept·cut summary, burn-in, 3 buttons, progress, success) / **Transcription** (tokens·language·cost, Re-transcribe, transcribe progress). Edit summary moved from the meta blob into the Export card where the decision happens.
+- [x] Export success: `.export-success` card — success-tinted border/background, "✓ Exported <filename>" + Show in Finder. CSS-only.
+- [x] One `ProgressLine` component (label + tabular % + optional Cancel + bar) replaces all four ad-hoc progress renderings (proxy, transcribe in empty state, transcribe in pane, export); dead `.progress`/`.export-block`/`.export-result` CSS removed; `progress { accent-color }`.
+- **Verified**: typecheck/lint/118 tests ✓; token cross-check ✓; CDP screenshot of the card layout with a cut project (kept·cut chip, single primary, grouped Re-transcribe) ✓. Not verifiable headlessly (native save dialog): the success card and live export/transcribe ProgressLine states — **user: run one real export (dev server stopped!) to see the peak-end card**; the ffmpeg export path itself is covered by export.test.ts.
 
 ### Phase 5 — Accessibility + final pass
 **Laws: Accessibility, Aesthetic-Usability**
@@ -79,6 +80,6 @@ Audit with law-by-law violations: see [findings.md](findings.md).
 - [x] Audit complete (findings.md)
 - [x] Phase 1 — tokens + hierarchy (2026-07-07, uncommitted)
 - [x] Phase 2 — first-run + header (2026-07-07, uncommitted)
-- [ ] Phase 3 — editing affordances
-- [ ] Phase 4 — grouping + feedback
+- [x] Phase 3 — editing affordances (2026-07-08, uncommitted)
+- [x] Phase 4 — grouping + feedback (2026-07-08, uncommitted)
 - [ ] Phase 5 — accessibility + final pass
