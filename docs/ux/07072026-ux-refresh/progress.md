@@ -42,6 +42,19 @@
 - Export success upgraded from a 12px line to a success-tinted `.export-success` card with the output filename and Show in Finder.
 - CDP screenshot confirms the card layout with a real cut project: one blue primary per view, clear group boundaries, correct kept·cut chip.
 
+## Session 2026-07-08 (cont.) — Phase 5 implemented — REFRESH COMPLETE
+
+- Accessibility sweep: `role="alert"` on the error banner; `aria-label` on the gear, error ✕, zoom slider, and every progress bar; tooltips on the selection-toolbar button and waveform Fit. Focus-visible audit found the global ring already covers everything (text inputs intentionally swap it for an accent border; `.token-edit` intentionally bare).
+- Fixed the audit's best catch: `.ptime` paragraph timestamps advertised clickability (pointer cursor + hover color since the MVP) but had no handler — now they seek to the paragraph start via a new `seekToTime` callback threaded into `ParagraphView` (with `preventDefault` so a click doesn't clear the token selection).
+- Copied the nine verification screenshots into `screenshots/` as the visual record of the refresh.
+- CDP checks: Tab order (2 tabs → Open Video, ring clearly rendered), ptime seek moves `video.currentTime`, aria attributes present in the live DOM.
+
+## Test results (Phase 5)
+
+- `npm run typecheck` ✓ · `npm run lint` ✓ · `npm test` 118/118 ✓
+- Focus ring screenshot ✓ · ptime seek 0 → 0.001 (paragraph start + epsilon) ✓ · aria sanity in live DOM ✓
+- **Handed to user**: one real export (dev server stopped) to see the peak-end success card; HEVC drop → proxy; API-key save/change/remove in the popover; CJK transcript rendering under the selection toolbar.
+
 ## Test results (Phase 4)
 
 - `npm run typecheck` ✓ · `npm run lint` ✓ · `npm test` 118/118 ✓ · CSS token cross-check ✓

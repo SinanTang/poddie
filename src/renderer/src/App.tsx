@@ -119,6 +119,7 @@ function SettingsMenu({
       <button
         className="ghost icon"
         title="Settings"
+        aria-label="Settings"
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
@@ -176,7 +177,7 @@ function ProgressLine({
           </button>
         )}
       </div>
-      <progress value={fraction} max={1} />
+      <progress aria-label={label} value={fraction} max={1} />
     </div>
   )
 }
@@ -637,12 +638,12 @@ export default function App(): React.JSX.Element {
       </header>
 
       {error && (
-        <div className="error">
+        <div className="error" role="alert">
           <div className="error-body">
             {error}
             {appInfo && <div className="error-hint">Full details: {appInfo.logPath}</div>}
           </div>
-          <button className="error-close" onClick={() => setError(null)} title="Dismiss">
+          <button className="error-close" onClick={() => setError(null)} title="Dismiss" aria-label="Dismiss error">
             ✕
           </button>
         </div>

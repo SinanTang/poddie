@@ -51,12 +51,14 @@ Audit with law-by-law violations: see [findings.md](findings.md).
 - [x] One `ProgressLine` component (label + tabular % + optional Cancel + bar) replaces all four ad-hoc progress renderings (proxy, transcribe in empty state, transcribe in pane, export); dead `.progress`/`.export-block`/`.export-result` CSS removed; `progress { accent-color }`.
 - **Verified**: typecheck/lint/118 tests ✓; token cross-check ✓; CDP screenshot of the card layout with a cut project (kept·cut chip, single primary, grouped Re-transcribe) ✓. Not verifiable headlessly (native save dialog): the success card and live export/transcribe ProgressLine states — **user: run one real export (dev server stopped!) to see the peak-end card**; the ffmpeg export path itself is covered by export.test.ts.
 
-### Phase 5 — Accessibility + final pass
+### Phase 5 — Accessibility + final pass ✅ 2026-07-08
 **Laws: Accessibility, Aesthetic-Usability**
-- [ ] `:focus-visible` audit across all interactive elements; tooltip audit (every icon-ish button has `title`)
-- [ ] `prefers-reduced-motion` guard on any transition added in earlier phases
-- [ ] Final visual regression pass through every state; update this plan + progress.md; screenshot before/after
-- **Verify**: keyboard-only walkthrough of the entire pipeline (open → transcribe → edit → export)
+- [x] `:focus-visible` audit: global ring covers buttons/select/checkbox/range/video; text inputs swap it for an accent border (still a visible indicator); `.token-edit` keeps `outline: none` deliberately (mouse-initiated, has accent border). CDP-verified the ring renders on Tab.
+- [x] Tooltip + accessible-name audit: sel-toolbar button ("Same as pressing ⌫"), waveform Fit, zoom slider `aria-label`, gear `aria-label`, error ✕ `aria-label`, `role="alert"` on the banner, `aria-label` on every `<progress>` (via ProgressLine)
+- [x] `prefers-reduced-motion` guard — landed in Phase 1, re-confirmed it covers all transitions (no animations exist)
+- [x] **Audit-found bug fixed**: paragraph timestamps (`.ptime`) had `cursor: pointer` + hover styling but NO click handler — a lying affordance. Now they seek to the paragraph start (CDP-verified currentTime moves).
+- [x] Final state pass + screenshots committed to `screenshots/` (first-run, popover, drop overlay, selection toolbar, cut state, error banner, cards, focus ring)
+- **Verified**: typecheck/lint/118 tests ✓; Tab order reaches gear → Open Video (ring visible); keyboard pipeline (Tab+Enter through open/transcribe/export) relies on native dialogs — sanity-checked reachability, full walkthrough left to the user. Word-level selection remains mouse-driven by design (pre-existing; out of refresh scope).
 
 ## Key risks
 
@@ -82,4 +84,6 @@ Audit with law-by-law violations: see [findings.md](findings.md).
 - [x] Phase 2 — first-run + header (2026-07-07, uncommitted)
 - [x] Phase 3 — editing affordances (2026-07-08, uncommitted)
 - [x] Phase 4 — grouping + feedback (2026-07-08, uncommitted)
-- [ ] Phase 5 — accessibility + final pass
+- [x] Phase 5 — accessibility + final pass (2026-07-08, uncommitted)
+
+**ALL PHASES COMPLETE.** Remaining user verification: one real export end-to-end (dev server stopped), HEVC drop with proxy, API-key flows in the popover, CJK transcript eyeball.

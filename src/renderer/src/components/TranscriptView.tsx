@@ -108,6 +108,7 @@ interface ParagraphViewProps {
   onCommitEdit: (index: number, text: string) => void
   onCancelEdit: () => void
   onMergePrev: (index: number, draft: string) => void
+  onTimeClick: (sec: number) => void
 }
 
 const ParagraphView = memo(function ParagraphView({
@@ -127,7 +128,8 @@ const ParagraphView = memo(function ParagraphView({
   onTokenDoubleClick,
   onCommitEdit,
   onCancelEdit,
-  onMergePrev
+  onMergePrev,
+  onTimeClick
 }: ParagraphViewProps): React.JSX.Element {
   const tokens: React.ReactNode[] = []
   let prevWordText = ''
@@ -175,7 +177,16 @@ const ParagraphView = memo(function ParagraphView({
   }
   return (
     <p className="para">
-      <span className="ptime">{fmtDuration(startSec)}</span>
+      <span
+        className="ptime"
+        title="Seek to this paragraph"
+        onMouseDown={(e) => {
+          e.preventDefault() // don't clear the selection under the cursor
+          onTimeClick(startSec)
+        }}
+      >
+        {fmtDuration(startSec)}
+      </span>
       {tokens}
     </p>
   )
@@ -238,6 +249,13 @@ export function TranscriptView({
       if (videoEl && items[index]) videoEl.currentTime = items[index].start + 0.001
     },
     [videoEl, items]
+  )
+
+  const seekToTime = useCallback(
+    (sec: number) => {
+      if (videoEl) videoEl.currentTime = sec + 0.001
+    },
+    [videoEl]
   )
 
   const onTokenMouseDown = useCallback((index: number, shiftKey: boolean) => {
@@ -439,6 +457,7 @@ export function TranscriptView({
               onCommitEdit={onCommitEdit}
               onCancelEdit={onCancelEdit}
               onMergePrev={onMergePrev}
+              onTimeClick={seekToTime}
             />
           )
         })}
@@ -446,6 +465,7 @@ export function TranscriptView({
           <div className="sel-toolbar" style={{ top: selBar.top, left: selBar.left }}>
             <button
               className="small"
+              title="Same as pressing ⌫"
               onClick={(e) => {
                 onToggleRange(selLo, selHi)
                 e.currentTarget.blur() // keep Space/Enter on the video, not this button
