@@ -106,11 +106,11 @@ interface Suggestion {
 - Staleness design: suggestions carry the text they saw (anchorText / span text); apply re-checks against current items and silently skips mismatches — callers can diff counts for the UI
 
 ### Phase 2: Review UI + filler-list path (ships standalone)
-**Status**: pending
-- [ ] Toolbar: "Find fillers" → list detector → review panel (grouped, counts, accept/reject, bulk per category, click-to-seek, Esc closes)
-- [ ] Apply accepted → one undo step → autosave; waveform shading updates live
-- [ ] Removed-word rendering already exists (strikethrough) — verify filler cuts read clearly in the transcript view
-- [ ] USER CHECK on real footage: precision of the zh list, review ergonomics
+**Status**: built ✅ 2026-07-09 (tsc/eslint/135 tests/build all clean) — awaiting USER CHECK
+- [x] Toolbar "◌ Review N fillers" (live count, disabled at 0) → ReviewPanel.tsx: found/to-apply counts, per-row ✓/✗ (re-deciding reverts to pending), Accept/Reject all, row click seeks the video, Esc closes. Panel docks above the transcript in the same pane; suggestions snapshot on open (ids stay stable), apply re-validates and skips stale
+- [x] Apply accepted → suggestionChanges → ONE applyEdit (one undo step) → autosave + waveform shading + kept/cut summary all flow through the existing items pipeline
+- [x] Filler cuts render through the existing `.cut` strikethrough — no new rendering path
+- [ ] USER CHECK on real footage: precision of the zh list, review ergonomics (358 candidates on the real episode — is the row flow workable?)
 
 ### Phase 3: LLM service (main/llm.ts)
 **Status**: pending

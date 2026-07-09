@@ -50,3 +50,17 @@
   clean).
 - Next: Phase 2 — review UI + filler-list path in the renderer (toolbar
   "Find fillers", review panel, apply as one undo step, user check).
+
+## Session 2026-07-09 — Phase 2 built (user check pending)
+- components/ReviewPanel.tsx (new): generic suggestion review list — per-row
+  ✓/✗ with revert-to-pending toggle, bulk accept/reject, apply count, Esc
+  close, row click → seek. Reused as-is for LLM punct in Phase 4.
+- App.tsx: review state (snapshot + decisions map), live fillerCount memo,
+  openFillerReview/onDecide/applyReview/seekToItem; panel docks above
+  TranscriptView in the transcript pane.
+- TranscriptView.tsx: "◌ Review N fillers" toolbar button next to Trim
+  silences.
+- app.css: .review-* styles on the existing dark vocabulary.
+- Verified: tsc, eslint, 135 tests, electron-vite build all clean. Real-app
+  interaction needs the native file dialog → user check.
+- Next: user check on real footage, then Phase 3 (main/llm.ts punct service).

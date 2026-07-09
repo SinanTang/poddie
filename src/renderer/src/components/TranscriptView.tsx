@@ -21,6 +21,9 @@ interface TranscriptViewProps {
   /** How many silences a bulk trim would cut right now (0 disables the button). */
   silenceTrimCount: number
   onTrimSilences: () => void
+  /** Live filler-list match count (0 disables the button); clicking opens the review panel. */
+  fillerCount: number
+  onFindFillers: () => void
   canUndo: boolean
   canRedo: boolean
   onUndo: () => void
@@ -208,6 +211,8 @@ export function TranscriptView({
   onMergeWithPrev,
   silenceTrimCount,
   onTrimSilences,
+  fillerCount,
+  onFindFillers,
   canUndo,
   canRedo,
   onUndo,
@@ -363,6 +368,14 @@ export function TranscriptView({
             title="Cut every silence ≥ 0.75 s, keeping 0.15 s next to speech (one undo step)"
           >
             ✂ Trim {silenceTrimCount} silences
+          </button>
+          <button
+            className="ghost small"
+            onClick={onFindFillers}
+            disabled={fillerCount === 0}
+            title="Review filler-word candidates (嗯/那个/um/you know…) — nothing is cut until you apply"
+          >
+            ◌ Review {fillerCount} fillers
           </button>
           <button className="ghost small" onClick={onUndo} disabled={!canUndo} title="Undo (⌘Z)">
             ↩ Undo
