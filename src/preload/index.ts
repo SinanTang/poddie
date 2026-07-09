@@ -1,9 +1,11 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import { IPC, type PoddieApi, type TranscribeProgress } from '../shared/types'
 
 const api: PoddieApi = {
   getAppInfo: () => ipcRenderer.invoke(IPC.appInfo),
   selectVideo: () => ipcRenderer.invoke(IPC.selectVideo),
+  openVideoPath: (path) => ipcRenderer.invoke(IPC.openVideoPath, path),
+  pathForFile: (file) => webUtils.getPathForFile(file),
   extractAudio: (videoPath) => ipcRenderer.invoke(IPC.extractAudio, videoPath),
   getApiKeyStatus: () => ipcRenderer.invoke(IPC.apiKeyStatus),
   setApiKey: (key) => ipcRenderer.invoke(IPC.apiKeySet, key),

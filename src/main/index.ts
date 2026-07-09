@@ -103,6 +103,17 @@ app.whenReady().then(async () => {
     return probeVideo(filePaths[0])
   })
 
+  // drag-and-drop path — comes from the renderer, so validate before probing
+  handleIpc(IPC.openVideoPath, async (_event, path: string) => {
+    if (typeof path !== 'string' || path === '') throw new Error('Could not read the dropped file')
+    if (!/\.(mov|mp4|m4v)$/i.test(path)) {
+      throw new Error(`Not a supported video: ${basename(path)} (need .mov, .mp4 or .m4v)`)
+    }
+    if (!existsSync(path)) throw new Error(`File not found: ${path}`)
+    log('info', 'video', `open ${path} (dropped)`)
+    return probeVideo(path)
+  })
+
   handleIpc(IPC.extractAudio, async (_event, videoPath: string) => extractAudio(videoPath, cacheDir))
 
   handleIpc(IPC.proxyEnsure, async (event, videoPath: string) => {

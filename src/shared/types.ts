@@ -98,6 +98,7 @@ export interface AppInfo {
 export const IPC = {
   appInfo: 'app:info',
   selectVideo: 'video:select',
+  openVideoPath: 'video:openPath',
   extractAudio: 'audio:extract',
   apiKeyStatus: 'apiKey:status',
   apiKeySet: 'apiKey:set',
@@ -120,6 +121,13 @@ export const IPC = {
 export interface PoddieApi {
   getAppInfo(): Promise<AppInfo>
   selectVideo(): Promise<VideoInfo | null>
+  /** Open a known path (drag-and-drop). Throws on unsupported/missing files — no dialog, so no cancel/null case. */
+  openVideoPath(path: string): Promise<VideoInfo>
+  /**
+   * Absolute path of a dropped File. Electron ≥32 removed `File.path` from the
+   * renderer; only the preload can resolve it (webUtils.getPathForFile).
+   */
+  pathForFile(file: File): string
   extractAudio(videoPath: string): Promise<AudioExtractResult>
   getApiKeyStatus(): Promise<ApiKeyStatus>
   setApiKey(key: string): Promise<ApiKeyStatus>
