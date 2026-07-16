@@ -240,7 +240,9 @@ button.link:hover {
 }
 
 input[type='password'],
-input[type='search'] {
+input[type='search'],
+input[type='text'],
+textarea {
   background: var(--surface-1);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
@@ -251,9 +253,16 @@ input[type='search'] {
 }
 
 input[type='password']:focus,
-input[type='search']:focus {
+input[type='search']:focus,
+input[type='text']:focus,
+textarea:focus {
   border-color: var(--accent);
   outline: none;
+}
+
+textarea {
+  font-family: inherit;
+  resize: vertical;
 }
 
 /* ---------- search ---------- */
@@ -760,6 +769,93 @@ button.big {
 .key-error {
   color: var(--danger);
   font-size: var(--fs-sm);
+}
+
+/* ---------- feedback modal ---------- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal {
+  width: 620px;
+  max-width: calc(100vw - 2 * var(--space-4));
+  max-height: calc(100vh - 2 * var(--space-4));
+  overflow-y: auto;
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+.modal h2 {
+  font-size: var(--fs-lg);
+}
+
+.segmented {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.segmented button[aria-checked='true'] {
+  background: var(--accent-deep);
+  color: white;
+}
+
+.feedback-tech {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+}
+
+.feedback-preview {
+  background: var(--surface-0);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.feedback-preview-title {
+  font-weight: 600;
+  font-size: var(--fs-md);
+  margin-bottom: var(--space-2);
+}
+
+.feedback-preview pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+}
+
+.feedback-error {
+  color: var(--danger);
+  font-size: var(--fs-sm);
+}
+
+.modal-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.modal-actions .popover-hint {
+  flex: 1;
 }
 
 /* transitions above are decorative; honor the OS setting */

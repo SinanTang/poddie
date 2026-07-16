@@ -15,6 +15,8 @@ import {
 } from '../../shared/edit'
 import { buildCues, toSrt } from '../../shared/captions'
 import { buildSearchIndex, findMatches } from './lib/transcript'
+import { errText } from './lib/errors'
+import { FeedbackDialog } from './components/FeedbackDialog'
 import { SearchBar } from './components/SearchBar'
 import { TranscriptView } from './components/TranscriptView'
 import { Waveform } from './components/Waveform'
@@ -182,12 +184,6 @@ function ProgressLine({
   )
 }
 
-/** Human-readable message: strips Electron's "Error invoking remote method '…':" wrapper. */
-function errText(err: unknown): string {
-  const s = err instanceof Error ? err.message : String(err)
-  return s.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
-}
-
 type ProxyState = { status: 'none' | 'preparing' | 'ready'; path: string | null; fraction: number }
 
 export type SaveStatus =
@@ -224,6 +220,7 @@ export default function App(): React.JSX.Element {
   const [exporting, setExporting] = useState<{ fraction: number } | null>(null)
   const [exportResult, setExportResult] = useState<string | null>(null)
   const [burnIn, setBurnIn] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const dirtyRef = useRef(false)
   // dragenter/dragleave fire on every child transition — only depth 0↔1 matters
@@ -549,6 +546,7 @@ export default function App(): React.JSX.Element {
   // Global keys: space play/pause, ←/→ nudge 3 s, ⌘F search, ⌘Z/⇧⌘Z undo/redo
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
+      if (feedbackOpen) return // modal owns the keyboard (its own listener handles Escape)
       if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
         e.preventDefault()
         document.getElementById('transcript-search')?.focus()
@@ -575,7 +573,7 @@ export default function App(): React.JSX.Element {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [videoEl, undo, redo])
+  }, [videoEl, undo, redo, feedbackOpen])
 
   const playerPath = video ? (video.needsProxy ? proxy.path : video.path) : null
   const playerSrc = playerPath && appInfo ? `${appInfo.mediaBaseUrl}/${encodeURIComponent(playerPath)}` : null
@@ -625,6 +623,9 @@ export default function App(): React.JSX.Element {
           />
         )}
         <span className="spacer" />
+        <button className="ghost" onClick={() => setFeedbackOpen(true)}>
+          Send beta feedback
+        </button>
         <SettingsMenu
           appInfo={appInfo}
           engine={engine}
@@ -636,6 +637,8 @@ export default function App(): React.JSX.Element {
           Open Video…
         </button>
       </header>
+
+      {feedbackOpen && <FeedbackDialog onClose={() => setFeedbackOpen(false)} />}
 
       {error && (
         <div className="error" role="alert">
