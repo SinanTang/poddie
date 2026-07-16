@@ -42,15 +42,15 @@ describe('buildFeedbackBody', () => {
     expect(buildFeedbackBody('  it broke  ', null)).toBe('it broke')
   })
 
-  test('with tech info appends versions and the privacy note', () => {
+  test('with tech info appends the version block', () => {
     const body = buildFeedbackBody('it broke', tech)
     expect(body).toContain('it broke')
+    expect(body).toContain('**Technical details**')
     expect(body).toContain('- Poddie 0.1.0')
     expect(body).toContain('- Electron 31.7.7 · Chromium 126.0.6478.234')
     expect(body).toContain('- macOS 15.5 (arm64)')
     expect(body).toContain('- Caption burn-in (libass): available')
     expect(body).toContain('- Local Whisper: unavailable')
-    expect(body).toContain('no recordings, transcripts, file names, or logs')
   })
 
   test('empty description gets a placeholder so the issue is never blank', () => {

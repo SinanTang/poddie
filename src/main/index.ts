@@ -83,8 +83,9 @@ app.whenReady().then(async () => {
   const localWhisper = await probeLocalWhisper(modelsDir)
   if (!localWhisper.available) log('info', 'whisper-local', `local transcription disabled: ${localWhisper.hint}`)
 
-  // engine comes over IPC — normalize instead of trusting the wire
-  const asEngine = (engine: unknown): TranscribeEngine => (engine === 'local' ? 'local' : 'api')
+  // engine comes over IPC — normalize instead of trusting the wire; anything
+  // unrecognized falls back to the app default (local: free, fully offline)
+  const asEngine = (engine: unknown): TranscribeEngine => (engine === 'api' ? 'api' : 'local')
 
   handleIpc(IPC.appInfo, async () => ({
     logPath: getLogPath(),

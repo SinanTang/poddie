@@ -205,8 +205,10 @@ export default function App(): React.JSX.Element {
   const [project, setProject] = useState<Project | null>(null)
   const [editState, setEditState] = useState<EditHistory | null>(null)
   const [keyStatus, setKeyStatus] = useState<ApiKeyStatus | null>(null)
+  // Default engine is the local model: free, and audio never leaves the machine.
+  // The API is opt-in (stored once the user picks it in ⚙ Settings).
   const [engine, setEngine] = useState<TranscribeEngine>(() =>
-    localStorage.getItem('poddie.engine') === 'local' ? 'local' : 'api'
+    localStorage.getItem('poddie.engine') === 'api' ? 'api' : 'local'
   )
   const [tProgress, setTProgress] = useState<TranscribeProgress | null>(null)
   const [proxy, setProxy] = useState<ProxyState>({ status: 'none', path: null, fraction: 0 })
@@ -681,14 +683,24 @@ export default function App(): React.JSX.Element {
                   <button
                     className="big"
                     onClick={transcribe}
-                    disabled={busy !== null || (engine === 'api' && !keyStatus?.present) || !video.audioCodec}
+                    disabled={
+                      busy !== null ||
+                      (engine === 'api' && !keyStatus?.present) ||
+                      (engine === 'local' && appInfo !== null && !appInfo.localWhisper.available) ||
+                      !video.audioCodec
+                    }
                   >
                     {engine === 'local' ? 'Transcribe locally (free)' : `Transcribe (~$${costEstimate})`}
                   </button>
                   {engine === 'api' && !keyStatus?.present && (
                     <p className="hint">Add an OpenAI API key in ⚙ Settings (top right), or switch to the local model.</p>
                   )}
-                  {engine === 'local' && appInfo && !appInfo.localWhisper.modelPresent && (
+                  {engine === 'local' && appInfo && !appInfo.localWhisper.available && (
+                    <p className="hint">
+                      {appInfo.localWhisper.hint} — or switch to the OpenAI API in ⚙ Settings (top right).
+                    </p>
+                  )}
+                  {engine === 'local' && appInfo?.localWhisper.available && !appInfo.localWhisper.modelPresent && (
                     <p className="hint">First run downloads the local model (~1.6 GB).</p>
                   )}
                   {tProgress && busy && (
@@ -796,7 +808,12 @@ export default function App(): React.JSX.Element {
                   <button
                     className="ghost small"
                     onClick={transcribe}
-                    disabled={busy !== null || exporting !== null || (engine === 'api' && !keyStatus?.present)}
+                    disabled={
+                      busy !== null ||
+                      exporting !== null ||
+                      (engine === 'api' && !keyStatus?.present) ||
+                      (engine === 'local' && appInfo !== null && !appInfo.localWhisper.available)
+                    }
                   >
                     Re-transcribe…
                   </button>
