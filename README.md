@@ -138,10 +138,8 @@ npm run lint       # eslint
   (non-destructive `EditItem` / `keptRanges`), the media-serving approach, and the
   packaging gotchas.
 - **Design decisions & history:** [`docs/development/`](docs/development/) records every
-  architecture decision *with its rationale*, plus a detailed log of bugs and how they were
-  root-caused. Read it before large changes — it explains the *why*.
-- Keep business logic as pure, unit-tested functions (see `src/shared/`). Don't run
-  `npm run test:e2e` casually — it hits the real OpenAI API and costs money.
+  architecture decision.
+- Keep business logic as pure, unit-tested functions (see `src/shared/`).
 
 Please open an issue to discuss substantial changes before a PR.
 

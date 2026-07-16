@@ -6,13 +6,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Poddie is a **local, personal-use** Electron desktop app for editing video podcasts by editing their transcript (Descript-style): import an iPhone video → transcribe with the OpenAI Whisper API (word-level timestamps) → delete words/silences in the transcript or on the waveform → preview live → export the cut video with ffmpeg. Single user, no cloud sync, no multi-platform packaging.
 
-Full project history — architecture decisions with rationale, phase-by-phase status, every bug hit and how it was root-caused, and measured facts about the real footage — lives in `docs/development/04072026-poddie-mvp/`:
-- `task_plan.md` — architecture decisions table, data model, phase checklist, key risks, **errors encountered** (read this before re-debugging something that looks familiar — e.g. the Electron `protocol.handle` seekable-media dead end, the dev-server-hot-reload-kills-active-export trap)
-- `findings.md` — verified facts (ffmpeg recipes, Whisper API behavior, CJK transcript handling, real-footage measurements)
-- `progress.md` — session-by-session log
-
-Read these before making architectural changes — they explain *why*, not just *what*.
-
 ## Commands
 
 ```bash
