@@ -76,7 +76,7 @@ export function buildFeedbackBody(description: string, tech: FeedbackTechInfo | 
   ].join('\n')
 }
 
-export const FEEDBACK_REPO_URL = 'https://github.com/electronicbrains/poddie'
+export const FEEDBACK_REPO_URL = 'https://github.com/SinanTang/poddie'
 
 /** GitHub rejects very long request URLs; leave headroom under its ~8 KB cap. */
 export const FEEDBACK_URL_MAX = 7000

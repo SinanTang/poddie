@@ -60,7 +60,7 @@ No lock-in, no hidden database, no cloud.
 ## Install & run from source
 
 ```bash
-git clone https://github.com/electronicbrains/poddie.git
+git clone https://github.com/SinanTang/poddie.git
 cd poddie
 npm install
 npm run dev

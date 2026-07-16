@@ -5,10 +5,10 @@
   "description": "Text-based, local-first video & podcast editor",
   "author": "Sinan Tang",
   "license": "GPL-3.0-or-later",
-  "homepage": "https://github.com/electronicbrains/poddie",
+  "homepage": "https://github.com/SinanTang/poddie",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/electronicbrains/poddie.git"
+    "url": "git+https://github.com/SinanTang/poddie.git"
   },
   "main": "out/main/index.js",
   "scripts": {
