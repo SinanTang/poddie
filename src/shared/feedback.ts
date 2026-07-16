@@ -66,7 +66,7 @@ export function buildFeedbackBody(description: string, tech: FeedbackTechInfo | 
     '',
     '---',
     '',
-    '**Technical details** (versions only — no recordings, transcripts, file names, or logs):',
+    '**Technical details**:',
     '',
     `- Poddie ${tech.appVersion}`,
     `- Electron ${tech.electronVersion} · Chromium ${tech.chromeVersion}`,

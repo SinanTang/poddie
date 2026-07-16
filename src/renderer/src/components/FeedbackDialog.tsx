@@ -90,7 +90,7 @@ export function FeedbackDialog({ onClose }: { onClose: () => void }): React.JSX.
 
         <div className="popover-row">
           <label className="popover-label" htmlFor="feedback-summary">
-            Summary (becomes the issue title)
+            Summary
           </label>
           <input
             id="feedback-summary"
@@ -123,7 +123,7 @@ export function FeedbackDialog({ onClose }: { onClose: () => void }): React.JSX.
             disabled={tech === null}
             onChange={(e) => setIncludeTech(e.target.checked)}
           />
-          Include technical details — versions only, never recordings, transcripts, file names, or logs
+          Include technical details
         </label>
 
         <div className="popover-row">
@@ -142,7 +142,7 @@ export function FeedbackDialog({ onClose }: { onClose: () => void }): React.JSX.
 
         <div className="modal-actions">
           <span className="popover-hint">
-            Opens github.com in your browser — nothing is sent until you submit the issue there.
+            Opens github.com in your browser
           </span>
           <button className="ghost" onClick={onClose}>
             Cancel
