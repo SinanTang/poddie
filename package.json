@@ -2,9 +2,9 @@
   "name": "poddie",
   "version": "0.1.0",
   "private": true,
-  "description": "Transcript-based video podcast editor (local, personal use)",
+  "description": "Text-based, local-first video & podcast editor",
   "author": "Sinan Tang",
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
   "homepage": "https://github.com/electronicbrains/poddie",
   "repository": {
     "type": "git",
