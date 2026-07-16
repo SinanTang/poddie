@@ -15,6 +15,8 @@ import {
 } from '../../shared/edit'
 import { buildCues, toSrt } from '../../shared/captions'
 import { buildSearchIndex, findMatches } from './lib/transcript'
+import { errText } from './lib/errors'
+import { FeedbackDialog } from './components/FeedbackDialog'
 import { SearchBar } from './components/SearchBar'
 import { TranscriptView } from './components/TranscriptView'
 import { Waveform } from './components/Waveform'
@@ -182,12 +184,6 @@ function ProgressLine({
   )
 }
 
-/** Human-readable message: strips Electron's "Error invoking remote method '…':" wrapper. */
-function errText(err: unknown): string {
-  const s = err instanceof Error ? err.message : String(err)
-  return s.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
-}
-
 type ProxyState = { status: 'none' | 'preparing' | 'ready'; path: string | null; fraction: number }
 
 export type SaveStatus =
@@ -209,8 +205,10 @@ export default function App(): React.JSX.Element {
   const [project, setProject] = useState<Project | null>(null)
   const [editState, setEditState] = useState<EditHistory | null>(null)
   const [keyStatus, setKeyStatus] = useState<ApiKeyStatus | null>(null)
+  // Default engine is the local model: free, and audio never leaves the machine.
+  // The API is opt-in (stored once the user picks it in ⚙ Settings).
   const [engine, setEngine] = useState<TranscribeEngine>(() =>
-    localStorage.getItem('poddie.engine') === 'local' ? 'local' : 'api'
+    localStorage.getItem('poddie.engine') === 'api' ? 'api' : 'local'
   )
   const [tProgress, setTProgress] = useState<TranscribeProgress | null>(null)
   const [proxy, setProxy] = useState<ProxyState>({ status: 'none', path: null, fraction: 0 })
@@ -224,6 +222,7 @@ export default function App(): React.JSX.Element {
   const [exporting, setExporting] = useState<{ fraction: number } | null>(null)
   const [exportResult, setExportResult] = useState<string | null>(null)
   const [burnIn, setBurnIn] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const dirtyRef = useRef(false)
   // dragenter/dragleave fire on every child transition — only depth 0↔1 matters
@@ -549,6 +548,7 @@ export default function App(): React.JSX.Element {
   // Global keys: space play/pause, ←/→ nudge 3 s, ⌘F search, ⌘Z/⇧⌘Z undo/redo
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
+      if (feedbackOpen) return // modal owns the keyboard (its own listener handles Escape)
       if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
         e.preventDefault()
         document.getElementById('transcript-search')?.focus()
@@ -575,7 +575,7 @@ export default function App(): React.JSX.Element {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [videoEl, undo, redo])
+  }, [videoEl, undo, redo, feedbackOpen])
 
   const playerPath = video ? (video.needsProxy ? proxy.path : video.path) : null
   const playerSrc = playerPath && appInfo ? `${appInfo.mediaBaseUrl}/${encodeURIComponent(playerPath)}` : null
@@ -625,6 +625,9 @@ export default function App(): React.JSX.Element {
           />
         )}
         <span className="spacer" />
+        <button className="ghost" onClick={() => setFeedbackOpen(true)}>
+          Send beta feedback
+        </button>
         <SettingsMenu
           appInfo={appInfo}
           engine={engine}
@@ -636,6 +639,8 @@ export default function App(): React.JSX.Element {
           Open Video…
         </button>
       </header>
+
+      {feedbackOpen && <FeedbackDialog onClose={() => setFeedbackOpen(false)} />}
 
       {error && (
         <div className="error" role="alert">
@@ -678,14 +683,24 @@ export default function App(): React.JSX.Element {
                   <button
                     className="big"
                     onClick={transcribe}
-                    disabled={busy !== null || (engine === 'api' && !keyStatus?.present) || !video.audioCodec}
+                    disabled={
+                      busy !== null ||
+                      (engine === 'api' && !keyStatus?.present) ||
+                      (engine === 'local' && appInfo !== null && !appInfo.localWhisper.available) ||
+                      !video.audioCodec
+                    }
                   >
                     {engine === 'local' ? 'Transcribe locally (free)' : `Transcribe (~$${costEstimate})`}
                   </button>
                   {engine === 'api' && !keyStatus?.present && (
                     <p className="hint">Add an OpenAI API key in ⚙ Settings (top right), or switch to the local model.</p>
                   )}
-                  {engine === 'local' && appInfo && !appInfo.localWhisper.modelPresent && (
+                  {engine === 'local' && appInfo && !appInfo.localWhisper.available && (
+                    <p className="hint">
+                      {appInfo.localWhisper.hint} — or switch to the OpenAI API in ⚙ Settings (top right).
+                    </p>
+                  )}
+                  {engine === 'local' && appInfo?.localWhisper.available && !appInfo.localWhisper.modelPresent && (
                     <p className="hint">First run downloads the local model (~1.6 GB).</p>
                   )}
                   {tProgress && busy && (
@@ -793,7 +808,12 @@ export default function App(): React.JSX.Element {
                   <button
                     className="ghost small"
                     onClick={transcribe}
-                    disabled={busy !== null || exporting !== null || (engine === 'api' && !keyStatus?.present)}
+                    disabled={
+                      busy !== null ||
+                      exporting !== null ||
+                      (engine === 'api' && !keyStatus?.present) ||
+                      (engine === 'local' && appInfo !== null && !appInfo.localWhisper.available)
+                    }
                   >
                     Re-transcribe…
                   </button>

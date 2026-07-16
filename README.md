@@ -1,13 +1,15 @@
 <div align="center">
   <img src="resources/icon.png" alt="Poddie" width="128" height="128" />
   <h1>Poddie <sup>⎨beta⎬</sup></h1>
-  <p><strong>Text-based Video Podcast Editor.</strong></p>
+  <p><strong>Text-based, local-first video & podcast editor.</strong></p>
   <p><em>Cut videos by deleting words — local, private, and free, all on your Mac.</em></p>
 </div>
 
 <div align="center">
 
 **🔒 100% local & private** · **💸 Free transcription** · **🔇 Silence auto-trim** · **💬 Caption burn-in** · **🎬 One-click export**
+
+<img src="docs/demo.gif" alt="Poddie demo" width="800" />
 
 </div>
 

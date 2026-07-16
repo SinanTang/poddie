@@ -30,7 +30,9 @@ const api: PoddieApi = {
   exportCaptions: (videoPath, srt) => ipcRenderer.invoke(IPC.captionsExport, videoPath, srt),
   cancelExport: () => ipcRenderer.invoke(IPC.exportCancel),
   getExportProgress: () => ipcRenderer.invoke(IPC.exportPoll),
-  revealFile: (path) => ipcRenderer.invoke(IPC.exportReveal, path)
+  revealFile: (path) => ipcRenderer.invoke(IPC.exportReveal, path),
+  getFeedbackTechInfo: () => ipcRenderer.invoke(IPC.feedbackTechInfo),
+  openFeedbackIssue: (category, title, body) => ipcRenderer.invoke(IPC.feedbackOpen, category, title, body)
 }
 
 contextBridge.exposeInMainWorld('poddie', api)
