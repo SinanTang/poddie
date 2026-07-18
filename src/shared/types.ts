@@ -1,13 +1,16 @@
-export interface VideoInfo {
+export interface MediaInfo {
   path: string
   sizeBytes: number
   durationSec: number
+  /** False for audio-only sources (podcast m4a/mp3/wav/…). */
+  hasVideo: boolean
+  /** Display dimensions; 0 when the source has no video stream. */
   width: number
   height: number
   fps: number
-  videoCodec: string
+  videoCodec: string | null
   audioCodec: string | null
-  /** True when Chromium can't decode this codec (e.g. iPhone HEVC) and preview needs an H.264 proxy. */
+  /** True when Chromium can't decode this codec (e.g. iPhone HEVC, ALAC) and preview needs a proxy. */
   needsProxy: boolean
 }
 
@@ -47,6 +50,7 @@ export interface VideoFingerprint {
 
 export interface Project {
   version: 1
+  /** Source media path (video or audio-only). Field name is persisted in .poddie.json — never rename. */
   videoPath: string
   fingerprint: VideoFingerprint
   transcript: Transcript | null
@@ -97,8 +101,8 @@ export interface AppInfo {
 
 export const IPC = {
   appInfo: 'app:info',
-  selectVideo: 'video:select',
-  openVideoPath: 'video:openPath',
+  selectMedia: 'media:select',
+  openMediaPath: 'media:openPath',
   extractAudio: 'audio:extract',
   apiKeyStatus: 'apiKey:status',
   apiKeySet: 'apiKey:set',
@@ -122,9 +126,9 @@ export const IPC = {
 /** The API the preload script exposes to the renderer as `window.poddie`. */
 export interface PoddieApi {
   getAppInfo(): Promise<AppInfo>
-  selectVideo(): Promise<VideoInfo | null>
+  selectMedia(): Promise<MediaInfo | null>
   /** Open a known path (drag-and-drop). Throws on unsupported/missing files — no dialog, so no cancel/null case. */
-  openVideoPath(path: string): Promise<VideoInfo>
+  openMediaPath(path: string): Promise<MediaInfo>
   /**
    * Absolute path of a dropped File. Electron ≥32 removed `File.path` from the
    * renderer; only the preload can resolve it (webUtils.getPathForFile).
@@ -142,7 +146,7 @@ export interface PoddieApi {
   transcribe(videoPath: string, engine: TranscribeEngine): Promise<Project | null>
   /** Subscribe to transcription progress; returns an unsubscribe function. */
   onTranscribeProgress(cb: (p: TranscribeProgress) => void): () => void
-  /** Create or fetch the cached H.264 preview proxy (for HEVC sources). */
+  /** Create or fetch the cached preview proxy (H.264 mp4 for HEVC video, AAC m4a for e.g. ALAC audio). */
   ensureProxy(videoPath: string): Promise<{ proxyPath: string }>
   onProxyProgress(cb: (fraction: number) => void): () => void
   getPeaks(videoPath: string): Promise<PeaksResult>

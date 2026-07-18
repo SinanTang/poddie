@@ -6,7 +6,7 @@ import icon from '../../resources/icon.png?asset'
 import { exportMedia, type ExportFormat } from './export'
 import { hasFilter } from './ffmpeg'
 import type { TimeRange } from '../shared/edit'
-import { computePeaks, ensurePreviewProxy, extractAudio, ffprobeJson, probeVideo } from './media'
+import { computePeaks, ensurePreviewProxy, extractAudio, ffprobeJson, probeMedia } from './media'
 import { startMediaServer, type MediaServer } from './media-server'
 import { clearApiKey, getApiKey, getApiKeyStatus, loadEnvFile, setApiKey } from './config'
 import { loadProject, projectPathFor, saveProject } from './project'
@@ -95,25 +95,33 @@ app.whenReady().then(async () => {
     localWhisper: localWhisper.available ? await probeLocalWhisper(modelsDir) : localWhisper
   }))
 
-  handleIpc(IPC.selectVideo, async () => {
+  const VIDEO_EXTENSIONS = ['mov', 'mp4', 'm4v']
+  const AUDIO_EXTENSIONS = ['m4a', 'mp3', 'wav', 'flac', 'ogg', 'opus', 'aac']
+
+  handleIpc(IPC.selectMedia, async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog({
       properties: ['openFile'],
-      filters: [{ name: 'Videos', extensions: ['mov', 'mp4', 'm4v'] }]
+      filters: [
+        { name: 'Audio & Video', extensions: [...VIDEO_EXTENSIONS, ...AUDIO_EXTENSIONS] },
+        { name: 'Videos', extensions: VIDEO_EXTENSIONS },
+        { name: 'Audio', extensions: AUDIO_EXTENSIONS }
+      ]
     })
     if (canceled || filePaths.length === 0) return null
-    log('info', 'video', `open ${filePaths[0]}`)
-    return probeVideo(filePaths[0])
+    log('info', 'media', `open ${filePaths[0]}`)
+    return probeMedia(filePaths[0])
   })
 
   // drag-and-drop path — comes from the renderer, so validate before probing
-  handleIpc(IPC.openVideoPath, async (_event, path: string) => {
+  const mediaExtRe = new RegExp(`\\.(${[...VIDEO_EXTENSIONS, ...AUDIO_EXTENSIONS].join('|')})$`, 'i')
+  handleIpc(IPC.openMediaPath, async (_event, path: string) => {
     if (typeof path !== 'string' || path === '') throw new Error('Could not read the dropped file')
-    if (!/\.(mov|mp4|m4v)$/i.test(path)) {
-      throw new Error(`Not a supported video: ${basename(path)} (need .mov, .mp4 or .m4v)`)
+    if (!mediaExtRe.test(path)) {
+      throw new Error(`Not a supported audio/video file: ${basename(path)} (need .mov, .mp4, .m4a, .mp3, .wav, …)`)
     }
     if (!existsSync(path)) throw new Error(`File not found: ${path}`)
-    log('info', 'video', `open ${path} (dropped)`)
-    return probeVideo(path)
+    log('info', 'media', `open ${path} (dropped)`)
+    return probeMedia(path)
   })
 
   handleIpc(IPC.extractAudio, async (_event, videoPath: string) => extractAudio(videoPath, cacheDir))

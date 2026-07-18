@@ -12,8 +12,8 @@ const MAX_PX_PER_SEC = 250
 const WHEEL_ZOOM_SPEED = 0.008
 
 interface WaveformProps {
-  /** The app's <video> element — wavesurfer binds to it for time/seek sync. */
-  mediaEl: HTMLVideoElement
+  /** The app's <video> or <audio> element — wavesurfer binds to it for time/seek sync. */
+  mediaEl: HTMLMediaElement
   peaks: PeaksResult
   /** Removed spans, shaded red on the waveform. */
   removedRanges: TimeRange[]

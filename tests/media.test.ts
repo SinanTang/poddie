@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, test } from 'vitest'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { computePeaks, ensurePreviewProxy, extractAudio, ffprobeJson, probeVideo } from '../src/main/media'
+import { computePeaks, ensurePreviewProxy, extractAudio, ffprobeJson, probeMedia } from '../src/main/media'
 import { runTool } from '../src/main/ffmpeg'
 
 const tmp = fileURLToPath(new URL('.tmp', import.meta.url))
@@ -23,11 +23,12 @@ beforeAll(async () => {
   ])
 }, 30_000)
 
-describe('probeVideo', () => {
+describe('probeMedia', () => {
   test('reads metadata from an H.264/AAC file', async () => {
-    const info = await probeVideo(sample)
+    const info = await probeMedia(sample)
     expect(info.durationSec).toBeGreaterThan(1.8)
     expect(info.durationSec).toBeLessThan(2.3)
+    expect(info.hasVideo).toBe(true)
     expect(info.width).toBe(640)
     expect(info.height).toBe(360)
     expect(info.fps).toBeCloseTo(30, 1)
@@ -40,16 +41,37 @@ describe('probeVideo', () => {
   test('reports display dimensions for rotated (iPhone-style) video', async () => {
     const rotated = join(tmp, 'rotated.mp4')
     await runTool('ffmpeg', ['-y', '-display_rotation', '-90', '-i', sample, '-c', 'copy', rotated])
-    const info = await probeVideo(rotated)
+    const info = await probeMedia(rotated)
     // coded 640x360 + 90° rotation flag → displays as 360x640
     expect(info.width).toBe(360)
     expect(info.height).toBe(640)
   })
 
-  test('rejects a file with no video stream', async () => {
+  test('audio-only file (aac): hasVideo false, playable without proxy', async () => {
     const audioOnly = join(tmp, 'audio-only.m4a')
     await runTool('ffmpeg', ['-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:a', 'aac', audioOnly])
-    await expect(probeVideo(audioOnly)).rejects.toThrow(/no video stream/i)
+    const info = await probeMedia(audioOnly)
+    expect(info.hasVideo).toBe(false)
+    expect(info.videoCodec).toBeNull()
+    expect(info.width).toBe(0)
+    expect(info.audioCodec).toBe('aac')
+    expect(info.needsProxy).toBe(false)
+    expect(info.durationSec).toBeGreaterThan(0.8)
+  })
+
+  test('audio-only ALAC needs a proxy (Chromium cannot play it)', async () => {
+    const alac = join(tmp, 'audio-alac.m4a')
+    await runTool('ffmpeg', ['-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:a', 'alac', alac])
+    const info = await probeMedia(alac)
+    expect(info.hasVideo).toBe(false)
+    expect(info.audioCodec).toBe('alac')
+    expect(info.needsProxy).toBe(true)
+  })
+
+  test('rejects a file with no media streams at all', async () => {
+    const bogus = join(tmp, 'not-media.txt')
+    await writeFile(bogus, 'plain text')
+    await expect(probeMedia(bogus)).rejects.toThrow()
   })
 })
 
@@ -114,11 +136,11 @@ describe('ensurePreviewProxy', () => {
       '-shortest',
       hevcSample
     ])
-    expect((await probeVideo(hevcSample)).needsProxy).toBe(true)
+    expect((await probeMedia(hevcSample)).needsProxy).toBe(true)
 
     const fractions: number[] = []
     const { proxyPath } = await ensurePreviewProxy(hevcSample, join(tmp, 'cache'), (f) => fractions.push(f))
-    const proxyInfo = await probeVideo(proxyPath)
+    const proxyInfo = await probeMedia(proxyPath)
     expect(proxyInfo.videoCodec).toBe('h264')
     expect(proxyInfo.needsProxy).toBe(false)
     expect(proxyInfo.height).toBeLessThanOrEqual(540)
@@ -129,4 +151,16 @@ describe('ensurePreviewProxy', () => {
     expect(again.proxyPath).toBe(proxyPath)
     expect(fractions.length).toBe(before)
   }, 60_000)
+
+  test('audio-only ALAC source gets an AAC m4a proxy', async () => {
+    const alac = join(tmp, 'proxy-alac.m4a')
+    await runTool('ffmpeg', ['-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-c:a', 'alac', alac])
+
+    const { proxyPath } = await ensurePreviewProxy(alac, join(tmp, 'cache'), () => {})
+    expect(proxyPath).toMatch(/\.proxy\.m4a$/)
+    const info = await probeMedia(proxyPath)
+    expect(info.hasVideo).toBe(false)
+    expect(info.audioCodec).toBe('aac')
+    expect(info.needsProxy).toBe(false)
+  }, 30_000)
 })
