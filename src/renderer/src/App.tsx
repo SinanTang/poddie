@@ -854,7 +854,7 @@ export default function App(): React.JSX.Element {
           <div className="empty-state">
             <div className="drop-zone">
               <span className="step-label">Step 1 of 3 · Open</span>
-              <p>Edit a podcast — video or audio — by editing its transcript.</p>
+              <p>Edit a podcast by editing its transcript.</p>
               <button className="big" onClick={openMedia}>
                 Open Media…
               </button>
