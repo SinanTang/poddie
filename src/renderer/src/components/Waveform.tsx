@@ -140,6 +140,7 @@ export function Waveform({ mediaEl, peaks, removedRanges, onRangeSelect }: Wavef
         <span className="wave-zoom-label">Zoom</span>
         <input
           type="range"
+          aria-label="Waveform zoom"
           min={0}
           max={1}
           step={0.001}
@@ -150,7 +151,12 @@ export function Waveform({ mediaEl, peaks, removedRanges, onRangeSelect }: Wavef
             if (f > 0) applyZoom(f * Math.pow(MAX_PX_PER_SEC / f, Number(e.target.value)))
           }}
         />
-        <button className="ghost small" onClick={() => applyZoom(0)} disabled={!ready || pxPerSec === 0}>
+        <button
+          className="ghost small"
+          title="Zoom out to fit the whole file"
+          onClick={() => applyZoom(0)}
+          disabled={!ready || pxPerSec === 0}
+        >
           Fit
         </button>
         <span className="wave-hint">⌘-scroll to zoom · drag selects a cut</span>

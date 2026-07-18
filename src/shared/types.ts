@@ -98,6 +98,7 @@ export interface AppInfo {
 export const IPC = {
   appInfo: 'app:info',
   selectVideo: 'video:select',
+  openVideoPath: 'video:openPath',
   extractAudio: 'audio:extract',
   apiKeyStatus: 'apiKey:status',
   apiKeySet: 'apiKey:set',
@@ -113,13 +114,22 @@ export const IPC = {
   exportCancel: 'export:cancel',
   exportPoll: 'export:poll',
   exportReveal: 'export:reveal',
-  captionsExport: 'captions:export'
+  captionsExport: 'captions:export',
+  feedbackTechInfo: 'feedback:techInfo',
+  feedbackOpen: 'feedback:open'
 } as const
 
 /** The API the preload script exposes to the renderer as `window.poddie`. */
 export interface PoddieApi {
   getAppInfo(): Promise<AppInfo>
   selectVideo(): Promise<VideoInfo | null>
+  /** Open a known path (drag-and-drop). Throws on unsupported/missing files — no dialog, so no cancel/null case. */
+  openVideoPath(path: string): Promise<VideoInfo>
+  /**
+   * Absolute path of a dropped File. Electron ≥32 removed `File.path` from the
+   * renderer; only the preload can resolve it (webUtils.getPathForFile).
+   */
+  pathForFile(file: File): string
   extractAudio(videoPath: string): Promise<AudioExtractResult>
   getApiKeyStatus(): Promise<ApiKeyStatus>
   setApiKey(key: string): Promise<ApiKeyStatus>
@@ -154,4 +164,15 @@ export interface PoddieApi {
   /** Current export completion in [0,1]. Polled (not pushed) so it survives renderer reloads. */
   getExportProgress(): Promise<number>
   revealFile(path: string): Promise<void>
+  /** Versions + capability flags for the feedback dialog — never paths, media, or logs. */
+  getFeedbackTechInfo(): Promise<import('./feedback').FeedbackTechInfo>
+  /**
+   * Open a pre-filled GitHub issue in the browser. Takes the exact title/body
+   * the user previewed; the main process only validates and builds the URL.
+   */
+  openFeedbackIssue(
+    category: import('./feedback').FeedbackCategory,
+    title: string,
+    body: string
+  ): Promise<void>
 }

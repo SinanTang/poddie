@@ -13,6 +13,7 @@ import { loadProject, projectPathFor, saveProject } from './project'
 import type { EditState } from '../shared/edit'
 import { transcribeVideo } from './transcribe'
 import { modelPathIn, probeLocalWhisper } from './whisper-local'
+import { asFeedbackCategory, buildFeedbackUrl, type FeedbackTechInfo } from '../shared/feedback'
 import { getLogPath, initLogger, log, logError } from './logger'
 import { fmtDuration, whisperCostUsd } from '../shared/format'
 import { IPC, type TranscribeEngine, type TranscribeProgress } from '../shared/types'
@@ -82,8 +83,9 @@ app.whenReady().then(async () => {
   const localWhisper = await probeLocalWhisper(modelsDir)
   if (!localWhisper.available) log('info', 'whisper-local', `local transcription disabled: ${localWhisper.hint}`)
 
-  // engine comes over IPC — normalize instead of trusting the wire
-  const asEngine = (engine: unknown): TranscribeEngine => (engine === 'local' ? 'local' : 'api')
+  // engine comes over IPC — normalize instead of trusting the wire; anything
+  // unrecognized falls back to the app default (local: free, fully offline)
+  const asEngine = (engine: unknown): TranscribeEngine => (engine === 'api' ? 'api' : 'local')
 
   handleIpc(IPC.appInfo, async () => ({
     logPath: getLogPath(),
@@ -101,6 +103,17 @@ app.whenReady().then(async () => {
     if (canceled || filePaths.length === 0) return null
     log('info', 'video', `open ${filePaths[0]}`)
     return probeVideo(filePaths[0])
+  })
+
+  // drag-and-drop path — comes from the renderer, so validate before probing
+  handleIpc(IPC.openVideoPath, async (_event, path: string) => {
+    if (typeof path !== 'string' || path === '') throw new Error('Could not read the dropped file')
+    if (!/\.(mov|mp4|m4v)$/i.test(path)) {
+      throw new Error(`Not a supported video: ${basename(path)} (need .mov, .mp4 or .m4v)`)
+    }
+    if (!existsSync(path)) throw new Error(`File not found: ${path}`)
+    log('info', 'video', `open ${path} (dropped)`)
+    return probeVideo(path)
   })
 
   handleIpc(IPC.extractAudio, async (_event, videoPath: string) => extractAudio(videoPath, cacheDir))
@@ -251,6 +264,27 @@ app.whenReady().then(async () => {
     await writeFile(outPath, srt, 'utf8')
     log('info', 'captions', `SRT written: ${outPath} (${srt.length} bytes)`)
     return { outPath }
+  })
+
+  handleIpc(IPC.feedbackTechInfo, async (): Promise<FeedbackTechInfo> => ({
+    appVersion: app.getVersion(),
+    electronVersion: process.versions.electron,
+    chromeVersion: process.versions.chrome,
+    osVersion: `${process.platform === 'darwin' ? 'macOS' : process.platform} ${process.getSystemVersion()}`,
+    arch: process.arch,
+    canBurnCaptions,
+    localWhisperAvailable: localWhisper.available
+  }))
+
+  handleIpc(IPC.feedbackOpen, async (_event, category: unknown, title: string, body: string) => {
+    if (typeof title !== 'string' || title.trim() === '') throw new Error('Feedback needs a title')
+    if (typeof body !== 'string' || body.trim() === '') throw new Error('Feedback needs a description')
+    // The URL is built here from a hardcoded repo — the renderer can never
+    // direct openExternal at an arbitrary destination.
+    const url = buildFeedbackUrl(asFeedbackCategory(category), title, body)
+    // log lengths only: feedback text is the user's to share on GitHub, not ours to keep
+    log('info', 'feedback', `opening GitHub issue (${asFeedbackCategory(category)}, ${body.length} chars)`)
+    await shell.openExternal(url)
   })
 
   createWindow()

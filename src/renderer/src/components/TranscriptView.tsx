@@ -1,8 +1,8 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { needsSpaceBetween } from '../../../shared/cjk'
 import { fmtDuration } from '../../../shared/format'
 import { buildParagraphs, findWordAtTime, type MatchRange } from '../lib/transcript'
-import type { EditItem } from '../../../shared/edit'
+import { toggleRangeChanges, type EditItem } from '../../../shared/edit'
 import type { TranscriptSegment } from '../../../shared/types'
 import type { SaveStatus } from '../App'
 
@@ -111,6 +111,7 @@ interface ParagraphViewProps {
   onCommitEdit: (index: number, text: string) => void
   onCancelEdit: () => void
   onMergePrev: (index: number, draft: string) => void
+  onTimeClick: (sec: number) => void
 }
 
 const ParagraphView = memo(function ParagraphView({
@@ -130,7 +131,8 @@ const ParagraphView = memo(function ParagraphView({
   onTokenDoubleClick,
   onCommitEdit,
   onCancelEdit,
-  onMergePrev
+  onMergePrev,
+  onTimeClick
 }: ParagraphViewProps): React.JSX.Element {
   const tokens: React.ReactNode[] = []
   let prevWordText = ''
@@ -178,7 +180,16 @@ const ParagraphView = memo(function ParagraphView({
   }
   return (
     <p className="para">
-      <span className="ptime">{fmtDuration(startSec)}</span>
+      <span
+        className="ptime"
+        title="Seek to this paragraph"
+        onMouseDown={(e) => {
+          e.preventDefault() // don't clear the selection under the cursor
+          onTimeClick(startSec)
+        }}
+      >
+        {fmtDuration(startSec)}
+      </span>
       {tokens}
     </p>
   )
@@ -222,6 +233,8 @@ export function TranscriptView({
   const scrollRef = useRef<HTMLDivElement>(null)
   const draggingRef = useRef(false)
   const [selection, setSelection] = useState<Selection | null>(null)
+  // mirrors draggingRef as state — the selection toolbar hides mid-drag
+  const [dragging, setDragging] = useState(false)
   const [activeIdx, setActiveIdx] = useState(-1)
   const [follow, setFollow] = useState(true)
   const [editingIdx, setEditingIdx] = useState(-1)
@@ -243,6 +256,13 @@ export function TranscriptView({
     [videoEl, items]
   )
 
+  const seekToTime = useCallback(
+    (sec: number) => {
+      if (videoEl) videoEl.currentTime = sec + 0.001
+    },
+    [videoEl]
+  )
+
   const onTokenMouseDown = useCallback((index: number, shiftKey: boolean) => {
     if (shiftKey) {
       setSelection((sel) => (sel ? { anchor: sel.anchor, focus: index } : { anchor: index, focus: index }))
@@ -250,6 +270,7 @@ export function TranscriptView({
       setSelection({ anchor: index, focus: index })
     }
     draggingRef.current = true
+    setDragging(true)
   }, [])
 
   const onTokenMouseEnter = useCallback((index: number) => {
@@ -287,6 +308,7 @@ export function TranscriptView({
     function onMouseUp(): void {
       if (!draggingRef.current) return
       draggingRef.current = false
+      setDragging(false)
       setSelection((sel) => {
         if (sel && sel.anchor === sel.focus) seekTo(sel.anchor)
         return sel
@@ -347,6 +369,37 @@ export function TranscriptView({
   const selLo = selection ? Math.min(selection.anchor, selection.focus) : -1
   const selHi = selection ? Math.max(selection.anchor, selection.focus) : -1
 
+  // What ⌫ would do to the current selection — drives the floating toolbar,
+  // the mouse-only path to the exact same onToggleRange the Delete key uses.
+  const selAction = useMemo(() => {
+    if (!selection) return null
+    const changes = toggleRangeChanges(items, selLo, selHi)
+    if (changes.length === 0) return null
+    return { count: changes.length, restore: changes[0].next.removed === false }
+  }, [items, selection, selLo, selHi])
+
+  // Anchor the toolbar above the selection focus (falls back below near the top).
+  const [selBar, setSelBar] = useState<{ top: number; left: number } | null>(null)
+  useLayoutEffect(() => {
+    const container = scrollRef.current
+    if (!selection || dragging || !selAction || !container) {
+      setSelBar(null)
+      return
+    }
+    const el =
+      container.querySelector<HTMLElement>(`[data-w="${selection.focus}"]`) ??
+      container.querySelector<HTMLElement>(`[data-w="${selHi}"]`)
+    if (!el) {
+      setSelBar(null)
+      return
+    }
+    const above = el.offsetTop - 34
+    setSelBar({
+      top: above >= 4 ? above : el.offsetTop + el.offsetHeight + 8,
+      left: Math.max(4, Math.min(el.offsetLeft, container.clientWidth - 180))
+    })
+  }, [selection, dragging, selAction, selHi])
+
   return (
     <div className="transcript-view">
       <div className="transcript-toolbar">
@@ -356,7 +409,7 @@ export function TranscriptView({
         </label>
         <span className="toolbar-hint">
           {selection
-            ? 'drag/⇧click to select · ⌫ delete or restore'
+            ? '⇧click extends · ⌫ cuts or restores · Esc clears'
             : 'click seeks · drag selects · double-click edits text'}
         </span>
         <span className="toolbar-actions">
@@ -417,9 +470,25 @@ export function TranscriptView({
               onCommitEdit={onCommitEdit}
               onCancelEdit={onCancelEdit}
               onMergePrev={onMergePrev}
+              onTimeClick={seekToTime}
             />
           )
         })}
+        {selBar && selAction && selection && (
+          <div className="sel-toolbar" style={{ top: selBar.top, left: selBar.left }}>
+            <button
+              className="small"
+              title="Same as pressing ⌫"
+              onClick={(e) => {
+                onToggleRange(selLo, selHi)
+                e.currentTarget.blur() // keep Space/Enter on the video, not this button
+              }}
+            >
+              {selAction.restore ? 'Restore' : '✂ Cut'} {selAction.count > 1 ? `${selAction.count} ` : ''}
+            </button>
+            <span className="kbd-hint">⌫</span>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -1,9 +1,11 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import { IPC, type PoddieApi, type TranscribeProgress } from '../shared/types'
 
 const api: PoddieApi = {
   getAppInfo: () => ipcRenderer.invoke(IPC.appInfo),
   selectVideo: () => ipcRenderer.invoke(IPC.selectVideo),
+  openVideoPath: (path) => ipcRenderer.invoke(IPC.openVideoPath, path),
+  pathForFile: (file) => webUtils.getPathForFile(file),
   extractAudio: (videoPath) => ipcRenderer.invoke(IPC.extractAudio, videoPath),
   getApiKeyStatus: () => ipcRenderer.invoke(IPC.apiKeyStatus),
   setApiKey: (key) => ipcRenderer.invoke(IPC.apiKeySet, key),
@@ -28,7 +30,9 @@ const api: PoddieApi = {
   exportCaptions: (videoPath, srt) => ipcRenderer.invoke(IPC.captionsExport, videoPath, srt),
   cancelExport: () => ipcRenderer.invoke(IPC.exportCancel),
   getExportProgress: () => ipcRenderer.invoke(IPC.exportPoll),
-  revealFile: (path) => ipcRenderer.invoke(IPC.exportReveal, path)
+  revealFile: (path) => ipcRenderer.invoke(IPC.exportReveal, path),
+  getFeedbackTechInfo: () => ipcRenderer.invoke(IPC.feedbackTechInfo),
+  openFeedbackIssue: (category, title, body) => ipcRenderer.invoke(IPC.feedbackOpen, category, title, body)
 }
 
 contextBridge.exposeInMainWorld('poddie', api)

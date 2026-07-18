@@ -16,6 +16,8 @@ import {
 import { buildCues, toSrt } from '../../shared/captions'
 import { findFillerSuggestions, suggestionChanges, type Suggestion } from '../../shared/cleanup'
 import { buildSearchIndex, findMatches } from './lib/transcript'
+import { errText } from './lib/errors'
+import { FeedbackDialog } from './components/FeedbackDialog'
 import { SearchBar } from './components/SearchBar'
 import { ReviewPanel, type Decision } from './components/ReviewPanel'
 import { TranscriptView } from './components/TranscriptView'
@@ -59,7 +61,7 @@ function ApiKeyBar({ status, onSaved }: { status: ApiKeyStatus; onSaved: (s: Api
       setDraft('')
       setEditing(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(errText(err))
     }
   }
 
@@ -72,7 +74,7 @@ function ApiKeyBar({ status, onSaved }: { status: ApiKeyStatus; onSaved: (s: Api
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && draft.trim() !== '' && save()}
       />
-      <button onClick={save} disabled={draft.trim() === ''}>
+      <button className="ghost" onClick={save} disabled={draft.trim() === ''}>
         Save key
       </button>
       {status.present && (
@@ -80,6 +82,107 @@ function ApiKeyBar({ status, onSaved }: { status: ApiKeyStatus; onSaved: (s: Api
       )}
       {error && <span className="key-error">{error}</span>}
     </span>
+  )
+}
+
+/** ⚙ popover for the once-in-a-while choices: transcribe engine + API key. */
+function SettingsMenu({
+  appInfo,
+  engine,
+  onEngineChange,
+  keyStatus,
+  onKeySaved
+}: {
+  appInfo: AppInfo | null
+  engine: TranscribeEngine
+  onEngineChange: (engine: TranscribeEngine) => void
+  keyStatus: ApiKeyStatus | null
+  onKeySaved: (s: ApiKeyStatus) => void
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onMouseDown(e: MouseEvent): void {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    function onKeyDown(e: KeyboardEvent): void {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    window.addEventListener('mousedown', onMouseDown)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('mousedown', onMouseDown)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+
+  return (
+    <div className="settings" ref={ref}>
+      <button
+        className="ghost icon"
+        title="Settings"
+        aria-label="Settings"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        ⚙
+      </button>
+      {open && (
+        <div className="popover" role="dialog" aria-label="Settings">
+          <div className="popover-row">
+            <span className="popover-label">Transcribe with</span>
+            <select
+              value={engine}
+              onChange={(e) => onEngineChange(e.target.value as TranscribeEngine)}
+              title={appInfo?.localWhisper.hint ?? undefined}
+            >
+              <option value="local" disabled={!appInfo?.localWhisper.available}>
+                Local model (free)
+              </option>
+              <option value="api">OpenAI API</option>
+            </select>
+            {engine === 'local' && appInfo && !appInfo.localWhisper.modelPresent && (
+              <span className="popover-hint">First local run downloads the Whisper model (~1.6 GB)</span>
+            )}
+          </div>
+          {engine === 'api' && keyStatus && (
+            <div className="popover-row">
+              <span className="popover-label">OpenAI API key</span>
+              <ApiKeyBar status={keyStatus} onSaved={onKeySaved} />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** The one progress pattern for every long-running job (proxy, transcribe, export). */
+function ProgressLine({
+  label,
+  fraction,
+  onCancel
+}: {
+  label: string
+  fraction: number
+  onCancel?: () => void
+}): React.JSX.Element {
+  return (
+    <div className="progress-line">
+      <div className="progress-line-head">
+        <span className="progress-label">{label}</span>
+        <span className="progress-pct">{Math.round(fraction * 100)}%</span>
+        {onCancel && (
+          <button className="ghost small" onClick={onCancel}>
+            Cancel
+          </button>
+        )}
+      </div>
+      <progress aria-label={label} value={fraction} max={1} />
+    </div>
   )
 }
 
@@ -111,8 +214,10 @@ export default function App(): React.JSX.Element {
   const [project, setProject] = useState<Project | null>(null)
   const [editState, setEditState] = useState<EditHistory | null>(null)
   const [keyStatus, setKeyStatus] = useState<ApiKeyStatus | null>(null)
+  // Default engine is the local model: free, and audio never leaves the machine.
+  // The API is opt-in (stored once the user picks it in ⚙ Settings).
   const [engine, setEngine] = useState<TranscribeEngine>(() =>
-    localStorage.getItem('poddie.engine') === 'local' ? 'local' : 'api'
+    localStorage.getItem('poddie.engine') === 'api' ? 'api' : 'local'
   )
   const [tProgress, setTProgress] = useState<TranscribeProgress | null>(null)
   const [proxy, setProxy] = useState<ProxyState>({ status: 'none', path: null, fraction: 0 })
@@ -126,7 +231,11 @@ export default function App(): React.JSX.Element {
   const [exporting, setExporting] = useState<{ fraction: number } | null>(null)
   const [exportResult, setExportResult] = useState<string | null>(null)
   const [burnIn, setBurnIn] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
   const dirtyRef = useRef(false)
+  // dragenter/dragleave fire on every child transition — only depth 0↔1 matters
+  const dragDepth = useRef(0)
 
   useEffect(() => {
     window.poddie.getAppInfo().then(setAppInfo).catch(() => setAppInfo(null))
@@ -169,7 +278,7 @@ export default function App(): React.JSX.Element {
       .then((p) => {
         if (!stale) setProject(p)
       })
-      .catch((err) => setError(`Could not load project: ${err instanceof Error ? err.message : String(err)}`))
+      .catch((err) => setError(`Could not load project: ${errText(err)}`))
     return () => {
       stale = true
     }
@@ -282,7 +391,7 @@ export default function App(): React.JSX.Element {
         .then(() => setSaveStatus({ state: 'saved', at: new Date().toLocaleTimeString() }))
         .catch((err) => {
           setSaveStatus({ state: 'failed' })
-          setError(`Autosave failed: ${err instanceof Error ? err.message : String(err)}`)
+          setError(`Autosave failed: ${errText(err)}`)
         })
     }, 800)
     return () => clearTimeout(timer)
@@ -368,36 +477,52 @@ export default function App(): React.JSX.Element {
     return () => cancelAnimationFrame(raf)
   }, [videoEl, cuts, video])
 
+  // One load path for both entries (dialog + drag-and-drop): reset per-video
+  // state, then kick off peaks and (if needed) the preview proxy.
+  function loadVideoInfo(info: VideoInfo): void {
+    setVideo(info)
+    setProject(null)
+    setTProgress(null)
+    setPeaks(null)
+    setQuery('')
+    setProxy({ status: info.needsProxy ? 'preparing' : 'none', path: null, fraction: 0 })
+    // the [videoPath, engine] effect loads the project for the active engine
+
+    window.poddie
+      .getPeaks(info.path)
+      .then(setPeaks)
+      .catch((err) => setError(`Waveform unavailable: ${errText(err)}`))
+    if (info.needsProxy) {
+      window.poddie
+        .ensureProxy(info.path)
+        .then(({ proxyPath }) => setProxy({ status: 'ready', path: proxyPath, fraction: 1 }))
+        .catch((err) => {
+          setProxy({ status: 'none', path: null, fraction: 0 })
+          setError(`Preview proxy failed: ${errText(err)}`)
+        })
+    }
+  }
+
   async function openVideo(): Promise<void> {
     setError(null)
     setBusy('Reading video metadata…')
     try {
       const info = await window.poddie.selectVideo()
-      if (info) {
-        setVideo(info)
-        setProject(null)
-        setTProgress(null)
-        setPeaks(null)
-        setQuery('')
-        setProxy({ status: info.needsProxy ? 'preparing' : 'none', path: null, fraction: 0 })
-        // the [videoPath, engine] effect loads the project for the active engine
-
-        window.poddie
-          .getPeaks(info.path)
-          .then(setPeaks)
-          .catch((err) => setError(`Waveform unavailable: ${err instanceof Error ? err.message : String(err)}`))
-        if (info.needsProxy) {
-          window.poddie
-            .ensureProxy(info.path)
-            .then(({ proxyPath }) => setProxy({ status: 'ready', path: proxyPath, fraction: 1 }))
-            .catch((err) => {
-              setProxy({ status: 'none', path: null, fraction: 0 })
-              setError(`Preview proxy failed: ${err instanceof Error ? err.message : String(err)}`)
-            })
-        }
-      }
+      if (info) loadVideoInfo(info)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(errText(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function openDroppedPath(path: string): Promise<void> {
+    setError(null)
+    setBusy('Reading video metadata…')
+    try {
+      loadVideoInfo(await window.poddie.openVideoPath(path))
+    } catch (err) {
+      setError(errText(err))
     } finally {
       setBusy(null)
     }
@@ -411,7 +536,7 @@ export default function App(): React.JSX.Element {
       const result = await window.poddie.transcribe(video.path, engine)
       if (result) setProject(result) // null = user canceled the confirmation dialog
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(errText(err))
       setTProgress(null)
     } finally {
       setBusy(null)
@@ -435,7 +560,7 @@ export default function App(): React.JSX.Element {
       const result = await window.poddie.exportMedia(video.path, kept, kind, burnInSrt)
       if (result) setExportResult(result.outPath) // null = dialog or mid-export cancel
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(errText(err))
     } finally {
       setExporting(null)
     }
@@ -453,7 +578,7 @@ export default function App(): React.JSX.Element {
       const result = await window.poddie.exportCaptions(video.path, srt)
       if (result) setExportResult(result.outPath)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(errText(err))
     }
   }
 
@@ -475,6 +600,7 @@ export default function App(): React.JSX.Element {
   // Global keys: space play/pause, ←/→ nudge 3 s, ⌘F search, ⌘Z/⇧⌘Z undo/redo
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
+      if (feedbackOpen) return // modal owns the keyboard (its own listener handles Escape)
       if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
         e.preventDefault()
         document.getElementById('transcript-search')?.focus()
@@ -501,7 +627,7 @@ export default function App(): React.JSX.Element {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [videoEl, undo, redo])
+  }, [videoEl, undo, redo, feedbackOpen])
 
   const playerPath = video ? (video.needsProxy ? proxy.path : video.path) : null
   const playerSrc = playerPath && appInfo ? `${appInfo.mediaBaseUrl}/${encodeURIComponent(playerPath)}` : null
@@ -509,8 +635,36 @@ export default function App(): React.JSX.Element {
   const keptSec = kept.reduce((acc, r) => acc + r.end - r.start, 0)
   const cutSec = video ? Math.max(0, video.durationSec - keptSec) : 0
 
+  const hasFiles = (e: React.DragEvent): boolean => e.dataTransfer.types.includes('Files')
+
   return (
-    <div className="app">
+    <div
+      className="app"
+      onDragEnter={(e) => {
+        if (!hasFiles(e)) return
+        e.preventDefault()
+        if (++dragDepth.current === 1) setDragOver(true)
+      }}
+      onDragOver={(e) => {
+        if (hasFiles(e)) e.preventDefault()
+      }}
+      onDragLeave={() => {
+        if (dragDepth.current > 0 && --dragDepth.current === 0) setDragOver(false)
+      }}
+      onDrop={(e) => {
+        e.preventDefault()
+        dragDepth.current = 0
+        setDragOver(false)
+        if (busy !== null) return // mirrors the disabled Open Video button
+        const file = e.dataTransfer.files[0]
+        if (file) void openDroppedPath(window.poddie.pathForFile(file))
+      }}
+    >
+      {dragOver && (
+        <div className="drop-overlay">
+          <span>Drop to open video</span>
+        </div>
+      )}
       <header>
         <h1>Poddie</h1>
         {transcript && (
@@ -523,25 +677,32 @@ export default function App(): React.JSX.Element {
           />
         )}
         <span className="spacer" />
-        <label className="engine-pick" title={appInfo?.localWhisper.hint ?? undefined}>
-          Transcribe:
-          <select value={engine} onChange={(e) => switchEngine(e.target.value as TranscribeEngine)}>
-            <option value="local" disabled={!appInfo?.localWhisper.available}>
-              Local model
-            </option>
-            <option value="api">OpenAI API</option>
-          </select>
-        </label>
-        {engine === 'api' && keyStatus && <ApiKeyBar status={keyStatus} onSaved={setKeyStatus} />}
-        <button onClick={openVideo} disabled={busy !== null}>
+        <button className="ghost" onClick={() => setFeedbackOpen(true)}>
+          Send beta feedback
+        </button>
+        <SettingsMenu
+          appInfo={appInfo}
+          engine={engine}
+          onEngineChange={switchEngine}
+          keyStatus={keyStatus}
+          onKeySaved={setKeyStatus}
+        />
+        <button className="ghost" onClick={openVideo} disabled={busy !== null}>
           Open Video…
         </button>
       </header>
 
+      {feedbackOpen && <FeedbackDialog onClose={() => setFeedbackOpen(false)} />}
+
       {error && (
-        <div className="error">
-          {error}
-          {appInfo && <div className="error-hint">Full details: {appInfo.logPath}</div>}
+        <div className="error" role="alert">
+          <div className="error-body">
+            {error}
+            {appInfo && <div className="error-hint">Full details: {appInfo.logPath}</div>}
+          </div>
+          <button className="error-close" onClick={() => setError(null)} title="Dismiss" aria-label="Dismiss error">
+            ✕
+          </button>
         </div>
       )}
 
@@ -583,23 +744,35 @@ export default function App(): React.JSX.Element {
                 />
               ) : (
                 <div className="empty-state">
-                  <p>No transcript yet.</p>
+                  <span className="step-label">Step 2 of 3 · Transcribe</span>
+                  <p>No transcript yet — transcribe to start editing.</p>
                   <button
+                    className="big"
                     onClick={transcribe}
-                    disabled={busy !== null || (engine === 'api' && !keyStatus?.present) || !video.audioCodec}
+                    disabled={
+                      busy !== null ||
+                      (engine === 'api' && !keyStatus?.present) ||
+                      (engine === 'local' && appInfo !== null && !appInfo.localWhisper.available) ||
+                      !video.audioCodec
+                    }
                   >
                     {engine === 'local' ? 'Transcribe locally (free)' : `Transcribe (~$${costEstimate})`}
                   </button>
                   {engine === 'api' && !keyStatus?.present && (
-                    <p className="hint">Add an OpenAI API key first (top right), or switch to Local model.</p>
+                    <p className="hint">Add an OpenAI API key in ⚙ Settings (top right), or switch to the local model.</p>
                   )}
-                  {engine === 'local' && appInfo && !appInfo.localWhisper.modelPresent && (
+                  {engine === 'local' && appInfo && !appInfo.localWhisper.available && (
+                    <p className="hint">
+                      {appInfo.localWhisper.hint} — or switch to the OpenAI API in ⚙ Settings (top right).
+                    </p>
+                  )}
+                  {engine === 'local' && appInfo?.localWhisper.available && !appInfo.localWhisper.modelPresent && (
                     <p className="hint">First run downloads the local model (~1.6 GB).</p>
                   )}
                   {tProgress && busy && (
-                    <span className="progress">
-                      <progress value={tProgress.fraction} max={1} /> {tProgress.message}
-                    </span>
+                    <div className="empty-progress">
+                      <ProgressLine label={tProgress.message} fraction={tProgress.fraction} />
+                    </div>
                   )}
                 </div>
               )}
@@ -610,40 +783,35 @@ export default function App(): React.JSX.Element {
                 <video ref={setVideoEl} key={playerSrc} className="player" controls src={playerSrc} />
               ) : (
                 <div className="proxy-progress">
-                  <p>Preparing preview…</p>
-                  <progress value={proxy.fraction} max={1} />
+                  <ProgressLine label="Preparing preview…" fraction={proxy.fraction} />
                 </div>
               )}
-              <div className="meta-compact">
-                <div>{video.path.split('/').pop()}</div>
-                <div>
-                  {fmtDuration(video.durationSec)} · {video.width}×{video.height} · {video.videoCodec}
-                  {video.needsProxy && ' (proxy preview)'} · {fmtBytes(video.sizeBytes)}
-                </div>
-                {transcript && (
+
+              <div className="card">
+                <div className="card-title">Media</div>
+                <div className="meta-compact">
+                  <div>{video.path.split('/').pop()}</div>
                   <div>
-                    {transcript.words.length.toLocaleString()} tokens · {transcript.language}
-                    {transcript.costUsd != null && ` · $${transcript.costUsd.toFixed(2)}`}
+                    {fmtDuration(video.durationSec)} · {video.width}×{video.height} · {video.videoCodec}
+                    {video.needsProxy && ' (proxy preview)'} · {fmtBytes(video.sizeBytes)}
                   </div>
-                )}
-                {cutSec > 0.05 && (
-                  <div className="edit-summary">
-                    Edited: {fmtDuration(keptSec)} kept · {fmtDuration(cutSec)} cut
-                  </div>
-                )}
+                </div>
               </div>
+
               {items && (
-                <div className="export-block">
+                <div className="card">
+                  <div className="card-title">Export</div>
+                  {cutSec > 0.05 && (
+                    <div className="edit-summary">
+                      {fmtDuration(keptSec)} kept · {fmtDuration(cutSec)} cut
+                    </div>
+                  )}
                   {exporting ? (
-                    <>
-                      <span className="progress">
-                        <progress value={exporting.fraction} max={1} /> Exporting…{' '}
-                        {Math.round(exporting.fraction * 100)}%
-                      </span>
-                      <button className="ghost small" onClick={() => void window.poddie.cancelExport()}>
-                        Cancel
-                      </button>
-                    </>
+                    <ProgressLine
+                      label="Exporting…"
+                      fraction={exporting.fraction}
+                      onCancel={() => void window.poddie.cancelExport()}
+                    />
                   ) : (
                     <>
                       <label
@@ -684,8 +852,8 @@ export default function App(): React.JSX.Element {
                     </>
                   )}
                   {exportResult && (
-                    <div className="export-result">
-                      ✓ Exported
+                    <div className="export-success">
+                      <span>✓ Exported {exportResult.split('/').pop()}</span>
                       <button className="ghost small" onClick={() => void window.poddie.revealFile(exportResult)}>
                         Show in Finder
                       </button>
@@ -693,19 +861,30 @@ export default function App(): React.JSX.Element {
                   )}
                 </div>
               )}
+
               {transcript && (
-                <button
-                  className="ghost small"
-                  onClick={transcribe}
-                  disabled={busy !== null || exporting !== null || (engine === 'api' && !keyStatus?.present)}
-                >
-                  Re-transcribe…
-                </button>
-              )}
-              {tProgress && busy && transcript && (
-                <span className="progress">
-                  <progress value={tProgress.fraction} max={1} /> {tProgress.message}
-                </span>
+                <div className="card">
+                  <div className="card-title">Transcription</div>
+                  <div className="meta-compact">
+                    <div>
+                      {transcript.words.length.toLocaleString()} tokens · {transcript.language}
+                      {transcript.costUsd != null && ` · $${transcript.costUsd.toFixed(2)}`}
+                    </div>
+                  </div>
+                  <button
+                    className="ghost small"
+                    onClick={transcribe}
+                    disabled={
+                      busy !== null ||
+                      exporting !== null ||
+                      (engine === 'api' && !keyStatus?.present) ||
+                      (engine === 'local' && appInfo !== null && !appInfo.localWhisper.available)
+                    }
+                  >
+                    Re-transcribe…
+                  </button>
+                  {tProgress && busy && <ProgressLine label={tProgress.message} fraction={tProgress.fraction} />}
+                </div>
               )}
             </aside>
           </div>
@@ -721,7 +900,14 @@ export default function App(): React.JSX.Element {
       ) : (
         !busy && (
           <div className="empty-state">
-            <p className="hint">Open an iPhone recording (.mov / .mp4) to get started.</p>
+            <div className="drop-zone">
+              <span className="step-label">Step 1 of 3 · Open</span>
+              <p>Edit a video podcast by editing its transcript.</p>
+              <button className="big" onClick={openVideo}>
+                Open Video…
+              </button>
+              <p className="hint">or drop a .mov / .mp4 anywhere in this window</p>
+            </div>
           </div>
         )
       )}
