@@ -46,12 +46,14 @@ export function buildExportArgs(
   ranges: TimeRange[],
   outPath: string,
   format: ExportFormat,
+  hasVideo: boolean,
   hasAudio: boolean,
   encoder: ExportEncoder = 'videotoolbox',
   subtitlesPath?: string
 ): string[] {
   if (ranges.length === 0) throw new Error('Nothing to export: every range was cut')
   const video = format === 'mp4'
+  if (video && !hasVideo) throw new Error('Cannot export video: the source has no video stream')
   if (!video && !hasAudio) throw new Error(`Cannot export ${format}: the source has no audio stream`)
   const burnIn = video && subtitlesPath ? subtitlesFilter(subtitlesPath) : null
 
@@ -117,18 +119,25 @@ export async function exportMedia(
   { onProgress, signal, subtitlesPath }: ExportOptions
 ): Promise<void> {
   const probe = await ffprobeJson(sourcePath)
+  const hasVideo = (probe.streams ?? []).some((s) => s.codec_type === 'video')
   const hasAudio = (probe.streams ?? []).some((s) => s.codec_type === 'audio')
   const keptDuration = ranges.reduce((acc, r) => acc + (r.end - r.start), 0)
   // the .part suffix keeps the real extension last so ffmpeg infers the container
   const partPath = `${outPath}.part.${format}`
 
+  const argsFor = (encoder: ExportEncoder): string[] =>
+    buildExportArgs(sourcePath, ranges, partPath, format, hasVideo, hasAudio, encoder, subtitlesPath)
+
   try {
+    // built outside the fallback try: a validation error (bad format/stream
+    // combination) must reject immediately, not trigger an encoder "fallback"
+    const primaryArgs = argsFor('videotoolbox')
     try {
-      await runToolProgress('ffmpeg', buildExportArgs(sourcePath, ranges, partPath, format, hasAudio, 'videotoolbox', subtitlesPath), keptDuration, onProgress, signal)
+      await runToolProgress('ffmpeg', primaryArgs, keptDuration, onProgress, signal)
     } catch (err) {
       if (signal?.aborted || format !== 'mp4') throw err
       log('warn', 'export', `videotoolbox failed, falling back to libx264: ${err instanceof Error ? err.message.slice(0, 200) : String(err)}`)
-      await runToolProgress('ffmpeg', buildExportArgs(sourcePath, ranges, partPath, format, hasAudio, 'libx264', subtitlesPath), keptDuration, onProgress, signal)
+      await runToolProgress('ffmpeg', argsFor('libx264'), keptDuration, onProgress, signal)
     }
     await rename(partPath, outPath)
     log('info', 'export', `done: ${outPath} (${format}, ${ranges.length} ranges, ${keptDuration.toFixed(1)} s)`)

@@ -23,11 +23,11 @@ import { Waveform } from './components/Waveform'
 import type {
   ApiKeyStatus,
   AppInfo,
+  MediaInfo,
   PeaksResult,
   Project,
   TranscribeEngine,
-  TranscribeProgress,
-  VideoInfo
+  TranscribeProgress
 } from '../../shared/types'
 
 function ApiKeyBar({ status, onSaved }: { status: ApiKeyStatus; onSaved: (s: ApiKeyStatus) => void }): React.JSX.Element {
@@ -201,7 +201,7 @@ interface EditHistory {
 
 export default function App(): React.JSX.Element {
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
-  const [video, setVideo] = useState<VideoInfo | null>(null)
+  const [media, setMedia] = useState<MediaInfo | null>(null)
   const [project, setProject] = useState<Project | null>(null)
   const [editState, setEditState] = useState<EditHistory | null>(null)
   const [keyStatus, setKeyStatus] = useState<ApiKeyStatus | null>(null)
@@ -213,7 +213,7 @@ export default function App(): React.JSX.Element {
   const [tProgress, setTProgress] = useState<TranscribeProgress | null>(null)
   const [proxy, setProxy] = useState<ProxyState>({ status: 'none', path: null, fraction: 0 })
   const [peaks, setPeaks] = useState<PeaksResult | null>(null)
-  const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null)
+  const [videoEl, setVideoEl] = useState<HTMLMediaElement | null>(null)
   const [query, setQuery] = useState('')
   const [activeMatch, setActiveMatch] = useState(0)
   const [busy, setBusy] = useState<string | null>(null)
@@ -258,14 +258,15 @@ export default function App(): React.JSX.Element {
   }, [isExporting])
 
   // The engine picks the active project file (api → .poddie.json, local →
-  // .poddie.local.json) — loading lives here so opening a video and flipping
-  // the engine are the same code path.
-  const videoPath = video?.path ?? null
+  // .poddie.local.json) — loading lives here so opening a file and flipping
+  // the engine are the same code path. Keyed on the media OBJECT (fresh per
+  // open), not the path: re-opening the same file must reload its project too
+  // (loadMediaInfo has already reset `project` to null by then).
   useEffect(() => {
-    if (!videoPath) return
+    if (!media) return
     let stale = false
     window.poddie
-      .loadProject(videoPath, engine)
+      .loadProject(media.path, engine)
       .then((p) => {
         if (!stale) setProject(p)
       })
@@ -273,7 +274,7 @@ export default function App(): React.JSX.Element {
     return () => {
       stale = true
     }
-  }, [videoPath, engine])
+  }, [media, engine])
 
   function switchEngine(next: TranscribeEngine): void {
     // a pending autosave must not follow the flip and write into the other
@@ -373,12 +374,12 @@ export default function App(): React.JSX.Element {
 
   // debounced autosave of edit state into the active engine's project file
   useEffect(() => {
-    if (!video || !items || !dirtyRef.current) return
+    if (!media || !items || !dirtyRef.current) return
     const timer = setTimeout(() => {
       dirtyRef.current = false
       setSaveStatus({ state: 'saving' })
       window.poddie
-        .saveEdit(video.path, { version: 1, gapMinSec: GAP_MIN_SEC, items }, engine)
+        .saveEdit(media.path, { version: 1, gapMinSec: GAP_MIN_SEC, items }, engine)
         .then(() => setSaveStatus({ state: 'saved', at: new Date().toLocaleTimeString() }))
         .catch((err) => {
           setSaveStatus({ state: 'failed' })
@@ -386,7 +387,7 @@ export default function App(): React.JSX.Element {
         })
     }, 800)
     return () => clearTimeout(timer)
-  }, [items, video, engine])
+  }, [items, media, engine])
 
   // pending bulk silence trims — recomputed as edits change, applied as ONE undo step
   const silenceTrims = useMemo(() => (items ? trimSilenceChanges(items) : []), [items])
@@ -394,14 +395,14 @@ export default function App(): React.JSX.Element {
 
   const cuts = useMemo(() => (items ? removedRanges(items) : []), [items])
   const kept = useMemo(
-    () => (items && video ? keptRanges(items, video.durationSec) : []),
-    [items, video]
+    () => (items && media ? keptRanges(items, media.durationSec) : []),
+    [items, media]
   )
 
   // preview controller: while playing, hop over removed ranges
   useEffect(() => {
     if (!videoEl || cuts.length === 0) return
-    const duration = video?.durationSec ?? 0
+    const duration = media?.durationSec ?? 0
     let raf = 0
     const tick = (): void => {
       if (!videoEl.paused && !videoEl.seeking) {
@@ -423,12 +424,12 @@ export default function App(): React.JSX.Element {
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [videoEl, cuts, video])
+  }, [videoEl, cuts, media])
 
-  // One load path for both entries (dialog + drag-and-drop): reset per-video
+  // One load path for both entries (dialog + drag-and-drop): reset per-file
   // state, then kick off peaks and (if needed) the preview proxy.
-  function loadVideoInfo(info: VideoInfo): void {
-    setVideo(info)
+  function loadMediaInfo(info: MediaInfo): void {
+    setMedia(info)
     setProject(null)
     setTProgress(null)
     setPeaks(null)
@@ -451,12 +452,12 @@ export default function App(): React.JSX.Element {
     }
   }
 
-  async function openVideo(): Promise<void> {
+  async function openMedia(): Promise<void> {
     setError(null)
-    setBusy('Reading video metadata…')
+    setBusy('Reading media metadata…')
     try {
-      const info = await window.poddie.selectVideo()
-      if (info) loadVideoInfo(info)
+      const info = await window.poddie.selectMedia()
+      if (info) loadMediaInfo(info)
     } catch (err) {
       setError(errText(err))
     } finally {
@@ -466,9 +467,9 @@ export default function App(): React.JSX.Element {
 
   async function openDroppedPath(path: string): Promise<void> {
     setError(null)
-    setBusy('Reading video metadata…')
+    setBusy('Reading media metadata…')
     try {
-      loadVideoInfo(await window.poddie.openVideoPath(path))
+      loadMediaInfo(await window.poddie.openMediaPath(path))
     } catch (err) {
       setError(errText(err))
     } finally {
@@ -477,11 +478,11 @@ export default function App(): React.JSX.Element {
   }
 
   async function transcribe(): Promise<void> {
-    if (!video) return
+    if (!media) return
     setError(null)
     setBusy('Transcribing…')
     try {
-      const result = await window.poddie.transcribe(video.path, engine)
+      const result = await window.poddie.transcribe(media.path, engine)
       if (result) setProject(result) // null = user canceled the confirmation dialog
     } catch (err) {
       setError(errText(err))
@@ -492,12 +493,12 @@ export default function App(): React.JSX.Element {
   }
 
   async function doExport(kind: 'video' | 'audio'): Promise<void> {
-    if (!video || kept.length === 0) return
+    if (!media || kept.length === 0) return
     setError(null)
     setExportResult(null)
     let burnInSrt: string | undefined
     if (kind === 'video' && burnIn && items) {
-      burnInSrt = toSrt(buildCues(items, video.durationSec))
+      burnInSrt = toSrt(buildCues(items, media.durationSec))
       if (!burnInSrt) {
         setError('No captions to burn in: every word is cut or blank')
         return
@@ -505,7 +506,7 @@ export default function App(): React.JSX.Element {
     }
     setExporting({ fraction: 0 })
     try {
-      const result = await window.poddie.exportMedia(video.path, kept, kind, burnInSrt)
+      const result = await window.poddie.exportMedia(media.path, kept, kind, burnInSrt)
       if (result) setExportResult(result.outPath) // null = dialog or mid-export cancel
     } catch (err) {
       setError(errText(err))
@@ -515,15 +516,15 @@ export default function App(): React.JSX.Element {
   }
 
   async function doExportCaptions(): Promise<void> {
-    if (!video || !items) return
+    if (!media || !items) return
     setError(null)
     try {
-      const srt = toSrt(buildCues(items, video.durationSec))
+      const srt = toSrt(buildCues(items, media.durationSec))
       if (!srt) {
         setError('No captions to export: every word is cut or blank')
         return
       }
-      const result = await window.poddie.exportCaptions(video.path, srt)
+      const result = await window.poddie.exportCaptions(media.path, srt)
       if (result) setExportResult(result.outPath)
     } catch (err) {
       setError(errText(err))
@@ -577,11 +578,11 @@ export default function App(): React.JSX.Element {
     return () => window.removeEventListener('keydown', onKey)
   }, [videoEl, undo, redo, feedbackOpen])
 
-  const playerPath = video ? (video.needsProxy ? proxy.path : video.path) : null
+  const playerPath = media ? (media.needsProxy ? proxy.path : media.path) : null
   const playerSrc = playerPath && appInfo ? `${appInfo.mediaBaseUrl}/${encodeURIComponent(playerPath)}` : null
-  const costEstimate = video ? whisperCostUsd(video.durationSec).toFixed(2) : null
+  const costEstimate = media ? whisperCostUsd(media.durationSec).toFixed(2) : null
   const keptSec = kept.reduce((acc, r) => acc + r.end - r.start, 0)
-  const cutSec = video ? Math.max(0, video.durationSec - keptSec) : 0
+  const cutSec = media ? Math.max(0, media.durationSec - keptSec) : 0
 
   const hasFiles = (e: React.DragEvent): boolean => e.dataTransfer.types.includes('Files')
 
@@ -610,7 +611,7 @@ export default function App(): React.JSX.Element {
     >
       {dragOver && (
         <div className="drop-overlay">
-          <span>Drop to open video</span>
+          <span>Drop to open</span>
         </div>
       )}
       <header>
@@ -635,8 +636,8 @@ export default function App(): React.JSX.Element {
           keyStatus={keyStatus}
           onKeySaved={setKeyStatus}
         />
-        <button className="ghost" onClick={openVideo} disabled={busy !== null}>
-          Open Video…
+        <button className="ghost" onClick={openMedia} disabled={busy !== null}>
+          Open Media…
         </button>
       </header>
 
@@ -654,7 +655,7 @@ export default function App(): React.JSX.Element {
         </div>
       )}
 
-      {video ? (
+      {media ? (
         <>
           <div className="workspace">
             <div className="transcript-pane">
@@ -687,7 +688,7 @@ export default function App(): React.JSX.Element {
                       busy !== null ||
                       (engine === 'api' && !keyStatus?.present) ||
                       (engine === 'local' && appInfo !== null && !appInfo.localWhisper.available) ||
-                      !video.audioCodec
+                      !media.audioCodec
                     }
                   >
                     {engine === 'local' ? 'Transcribe locally (free)' : `Transcribe (~$${costEstimate})`}
@@ -714,7 +715,11 @@ export default function App(): React.JSX.Element {
 
             <aside className="video-pane">
               {playerSrc ? (
-                <video ref={setVideoEl} key={playerSrc} className="player" controls src={playerSrc} />
+                media.hasVideo ? (
+                  <video ref={setVideoEl} key={playerSrc} className="player" controls src={playerSrc} />
+                ) : (
+                  <audio ref={setVideoEl} key={playerSrc} className="player" controls src={playerSrc} />
+                )
               ) : (
                 <div className="proxy-progress">
                   <ProgressLine label="Preparing preview…" fraction={proxy.fraction} />
@@ -724,10 +729,11 @@ export default function App(): React.JSX.Element {
               <div className="card">
                 <div className="card-title">Media</div>
                 <div className="meta-compact">
-                  <div>{video.path.split('/').pop()}</div>
+                  <div>{media.path.split('/').pop()}</div>
                   <div>
-                    {fmtDuration(video.durationSec)} · {video.width}×{video.height} · {video.videoCodec}
-                    {video.needsProxy && ' (proxy preview)'} · {fmtBytes(video.sizeBytes)}
+                    {fmtDuration(media.durationSec)} ·{' '}
+                    {media.hasVideo ? `${media.width}×${media.height} · ${media.videoCodec}` : media.audioCodec}
+                    {media.needsProxy && ' (proxy preview)'} · {fmtBytes(media.sizeBytes)}
                   </div>
                 </div>
               </div>
@@ -748,38 +754,50 @@ export default function App(): React.JSX.Element {
                     />
                   ) : (
                     <>
-                      <label
-                        className="burnin"
-                        title={
-                          appInfo?.canBurnCaptions
-                            ? 'Render the captions into the video frames'
-                            : 'Needs an ffmpeg build with libass (subtitles filter) — brew ffmpeg lacks it'
-                        }
-                      >
-                        <input
-                          type="checkbox"
-                          checked={burnIn && (appInfo?.canBurnCaptions ?? false)}
-                          onChange={(e) => setBurnIn(e.target.checked)}
-                          disabled={!appInfo?.canBurnCaptions}
-                        />
-                        Burn captions into video
-                      </label>
-                      <button onClick={() => void doExport('video')} disabled={kept.length === 0}>
-                        Export {fmtDuration(keptSec)} video…
-                      </button>
-                      <button
-                        className="ghost"
-                        onClick={() => void doExport('audio')}
-                        disabled={kept.length === 0 || !video.audioCodec}
-                        title="M4A or MP3 for podcast feeds — same cuts, no video"
-                      >
-                        Export audio only…
-                      </button>
+                      {media.hasVideo ? (
+                        <>
+                          <label
+                            className="burnin"
+                            title={
+                              appInfo?.canBurnCaptions
+                                ? 'Render the captions into the video frames'
+                                : 'Needs an ffmpeg build with libass (subtitles filter) — brew ffmpeg lacks it'
+                            }
+                          >
+                            <input
+                              type="checkbox"
+                              checked={burnIn && (appInfo?.canBurnCaptions ?? false)}
+                              onChange={(e) => setBurnIn(e.target.checked)}
+                              disabled={!appInfo?.canBurnCaptions}
+                            />
+                            Burn captions into video
+                          </label>
+                          <button onClick={() => void doExport('video')} disabled={kept.length === 0}>
+                            Export {fmtDuration(keptSec)} video…
+                          </button>
+                          <button
+                            className="ghost"
+                            onClick={() => void doExport('audio')}
+                            disabled={kept.length === 0 || !media.audioCodec}
+                            title="M4A or MP3 for podcast feeds — same cuts, no video"
+                          >
+                            Export audio only…
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => void doExport('audio')}
+                          disabled={kept.length === 0}
+                          title="M4A or MP3 for podcast feeds"
+                        >
+                          Export {fmtDuration(keptSec)} audio…
+                        </button>
+                      )}
                       <button
                         className="ghost"
                         onClick={() => void doExportCaptions()}
                         disabled={kept.length === 0}
-                        title="SRT sidecar on the edited timeline — upload alongside the video"
+                        title="SRT sidecar on the edited timeline"
                       >
                         Export captions (.srt)…
                       </button>
@@ -836,11 +854,11 @@ export default function App(): React.JSX.Element {
           <div className="empty-state">
             <div className="drop-zone">
               <span className="step-label">Step 1 of 3 · Open</span>
-              <p>Edit a video podcast by editing its transcript.</p>
-              <button className="big" onClick={openVideo}>
-                Open Video…
+              <p>Edit a podcast by editing its transcript.</p>
+              <button className="big" onClick={openMedia}>
+                Open Media…
               </button>
-              <p className="hint">or drop a .mov / .mp4 anywhere in this window</p>
+              <p className="hint">or drop a video (.mov, .mp4) or audio file (.m4a, .mp3, .wav, …) anywhere in this window</p>
             </div>
           </div>
         )

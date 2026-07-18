@@ -2,7 +2,7 @@
   <img src="resources/icon.png" alt="Poddie" width="128" height="128" />
   <h1>Poddie <sup>⎨beta⎬</sup></h1>
   <p><strong>Text-based, local-first video & podcast editor.</strong></p>
-  <p><em>Cut videos by deleting words — local, private, and free, all on your Mac.</em></p>
+  <p><em>Cut video or audio by deleting words — local, private, and free, all on your Mac.</em></p>
 </div>
 
 <div align="center">
@@ -15,8 +15,9 @@
 
 ---
 
-Poddie turns video editing into text editing. Import a recording, get a word-level
-transcript, then **delete the words you don't want**, and Poddie cuts the video to match. What takes an hour of timeline scrubbing now takes minutes of proofreading.
+Poddie turns podcast editing into text editing. Import a recording — video or
+audio-only — get a word-level transcript, then **delete the words you don't want**,
+and Poddie cuts the media to match. What takes an hour of timeline scrubbing now takes minutes of proofreading.
 
 Built for podcasters and creators who don't have time to edit their footage.
 
@@ -30,7 +31,7 @@ Built for podcasters and creators who don't have time to edit their footage.
 - 💬 **Caption burn-in** — generate captions from your transcript and burn them straight
   into the video. The kind of subtitle feature other editors put behind a subscription.
 - 📤 **Export anything** — cut video (MP4), audio-only podcast (M4A/MP3), or captions as a
-  standalone SRT file.
+  standalone SRT file. Audio sources export audio and captions — no fake video track.
 
 No lock-in, no hidden database, no cloud.
 
@@ -87,8 +88,9 @@ app → Open**, then confirm, and it launches normally from then on.
 
 ## How to use
 
-1. **Open Video…** — pick an `.mov`/`.mp4`/`.m4v`. iPhone HEVC is auto-converted to an
-   H.264 preview proxy (your original is untouched and is what gets exported).
+1. **Open Media…** — pick a video (`.mov`/`.mp4`/`.m4v`) or audio file (`.m4a`/`.mp3`/`.wav`/`.flac`/`.ogg`/`.opus`/`.aac`).
+   iPhone HEVC is auto-converted to an H.264 preview proxy, and audio Chromium can't play
+   (e.g. ALAC) to an AAC one — your original is untouched and is what gets exported.
 2. **Choose how to transcribe** in the header — **Local model** (free, private, no key) or
    **OpenAI API** (paste your key). Local's first run downloads a ~1.6 GB Whisper model once. You'll
    see a cost/time estimate and confirm.
@@ -96,7 +98,7 @@ app → Open**, then confirm, and it launches normally from then on.
    (press again on a fully-cut selection to restore). Double-click a word to fix its text.
    Use **✂ Trim silences** to bulk-remove dead air.
 4. **Preview** — the player skips your cuts live. Zoom the waveform for precise selections.
-5. **Export** the cut video, audio-only, or captions.
+5. **Export** the cut video, audio-only, or captions. (Audio sources offer audio and captions only.)
 
 Keyboard: <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> ±3s ·
 <kbd>⌘F</kbd> search · <kbd>⌘Z</kbd>/<kbd>⇧⌘Z</kbd> undo/redo.

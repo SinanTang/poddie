@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Poddie is a **local, personal-use** Electron desktop app for editing video podcasts by editing their transcript (Descript-style): import an iPhone video → transcribe with the OpenAI Whisper API (word-level timestamps) → delete words/silences in the transcript or on the waveform → preview live → export the cut video with ffmpeg. Single user, no cloud sync, no multi-platform packaging.
+Poddie is a **local, personal-use** Electron desktop app for editing podcasts by editing their transcript (Descript-style): import a recording (iPhone video, or audio-only m4a/mp3/wav/…) → transcribe with Whisper (word-level timestamps) → delete words/silences in the transcript or on the waveform → preview live → export the cut media with ffmpeg. Audio-only sources run the same pipeline minus video: `MediaInfo.hasVideo` gates the video export and caption burn-in. Single user, no cloud sync, no multi-platform packaging.
 
 ## Commands
 

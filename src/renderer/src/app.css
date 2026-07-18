@@ -322,6 +322,12 @@ textarea {
   background: black;
 }
 
+/* audio-only sources: just the native controls bar, no black video box */
+audio.player {
+  height: 54px;
+  background: transparent;
+}
+
 .meta-compact {
   font-size: var(--fs-sm);
   color: var(--text-muted);
