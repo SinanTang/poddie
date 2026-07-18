@@ -33,7 +33,7 @@ describe('buildExportArgs', () => {
   ]
 
   test('single range uses plain input seeking, no filter graph', () => {
-    const args = buildExportArgs('in.mov', [{ start: 1, end: 3 }], 'out.mp4', 'mp4', true, 'libx264')
+    const args = buildExportArgs('in.mov', [{ start: 1, end: 3 }], 'out.mp4', 'mp4', true, true, 'libx264')
     expect(args).toContain('-ss')
     expect(args).toContain('1.000')
     expect(args).toContain('-t')
@@ -42,7 +42,7 @@ describe('buildExportArgs', () => {
   })
 
   test('multi-range builds trim/atrim + concat graph', () => {
-    const args = buildExportArgs('in.mov', ranges, 'out.mp4', 'mp4', true)
+    const args = buildExportArgs('in.mov', ranges, 'out.mp4', 'mp4', true, true)
     const graph = args[args.indexOf('-filter_complex') + 1]
     expect(graph).toContain('[0:v]trim=start=1.000:end=2.000,setpts=PTS-STARTPTS[v0]')
     expect(graph).toContain('[0:a]atrim=start=4.000:end=5.500,asetpts=PTS-STARTPTS[a1]')
@@ -51,7 +51,7 @@ describe('buildExportArgs', () => {
   })
 
   test('audio-less source builds a video-only graph', () => {
-    const args = buildExportArgs('in.mov', ranges, 'out.mp4', 'mp4', false, 'libx264')
+    const args = buildExportArgs('in.mov', ranges, 'out.mp4', 'mp4', true, false, 'libx264')
     const graph = args[args.indexOf('-filter_complex') + 1]
     expect(graph).not.toContain('atrim')
     expect(graph).toContain('concat=n=2:v=1:a=0[v]')
@@ -59,7 +59,7 @@ describe('buildExportArgs', () => {
   })
 
   test('audio-only m4a: atrim-only graph, no video encode, faststart kept', () => {
-    const args = buildExportArgs('in.mov', ranges, 'out.m4a', 'm4a', true)
+    const args = buildExportArgs('in.mov', ranges, 'out.m4a', 'm4a', true, true)
     const graph = args[args.indexOf('-filter_complex') + 1]
     expect(graph).not.toContain('[0:v]') // no video trim chains…
     expect(graph).toContain('atrim=start') // …only audio ones
@@ -71,25 +71,26 @@ describe('buildExportArgs', () => {
   })
 
   test('audio-only mp3 uses libmp3lame and no mp4 flags', () => {
-    const args = buildExportArgs('in.mov', [{ start: 1, end: 3 }], 'out.mp3', 'mp3', true)
+    const args = buildExportArgs('in.mov', [{ start: 1, end: 3 }], 'out.mp3', 'mp3', true, true)
     expect(args.join(' ')).toContain('-c:a libmp3lame')
     expect(args.join(' ')).not.toContain('faststart')
     expect(args).toContain('-vn')
   })
 
-  test('empty ranges and audio export without an audio stream throw', () => {
-    expect(() => buildExportArgs('in.mov', [], 'out.mp4', 'mp4', true)).toThrow(/nothing to export/i)
-    expect(() => buildExportArgs('in.mov', ranges, 'out.m4a', 'm4a', false)).toThrow(/no audio stream/i)
+  test('empty ranges and stream/format mismatches throw', () => {
+    expect(() => buildExportArgs('in.mov', [], 'out.mp4', 'mp4', true, true)).toThrow(/nothing to export/i)
+    expect(() => buildExportArgs('in.mov', ranges, 'out.m4a', 'm4a', true, false)).toThrow(/no audio stream/i)
+    expect(() => buildExportArgs('in.m4a', ranges, 'out.mp4', 'mp4', false, true)).toThrow(/no video stream/i)
   })
 
   test('burn-in single range: -vf subtitles with quoted path', () => {
-    const args = buildExportArgs('in.mov', [{ start: 1, end: 3 }], 'out.mp4', 'mp4', true, 'videotoolbox', '/tmp/some dir/c.srt')
+    const args = buildExportArgs('in.mov', [{ start: 1, end: 3 }], 'out.mp4', 'mp4', true, true, 'videotoolbox', '/tmp/some dir/c.srt')
     const vf = args[args.indexOf('-vf') + 1]
     expect(vf).toBe("subtitles=filename='/tmp/some dir/c.srt'")
   })
 
   test('burn-in multi range: subtitles chained after concat, [vout] mapped', () => {
-    const args = buildExportArgs('in.mov', ranges, 'out.mp4', 'mp4', true, 'videotoolbox', '/tmp/c.srt')
+    const args = buildExportArgs('in.mov', ranges, 'out.mp4', 'mp4', true, true, 'videotoolbox', '/tmp/c.srt')
     const graph = args[args.indexOf('-filter_complex') + 1]
     expect(graph).toContain("concat=n=2:v=1:a=1[v][a];[v]subtitles=filename='/tmp/c.srt'[vout]")
     expect(args).toContain('[vout]')
@@ -97,7 +98,7 @@ describe('buildExportArgs', () => {
   })
 
   test('burn-in is ignored for audio-only formats', () => {
-    const args = buildExportArgs('in.mov', ranges, 'out.m4a', 'm4a', true, 'videotoolbox', '/tmp/c.srt')
+    const args = buildExportArgs('in.mov', ranges, 'out.m4a', 'm4a', true, true, 'videotoolbox', '/tmp/c.srt')
     expect(args.join(' ')).not.toContain('subtitles')
   })
 })
@@ -170,6 +171,21 @@ describe('exportMedia (real ffmpeg)', () => {
     const probe = await ffprobeJson(out)
     expect(Number(probe.format?.duration)).toBeCloseTo(2, 0)
     expect(probe.streams?.find((s) => s.codec_type === 'audio')?.codec_name).toBe('mp3')
+  }, 60_000)
+
+  test('audio-only SOURCE: m4a export works, mp4 export fails fast', async () => {
+    const audioSource = join(tmp, 'source-audio.m4a')
+    await runTool('ffmpeg', ['-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=10', '-c:a', 'aac', audioSource])
+
+    const out = join(tmp, 'edited-from-audio.m4a')
+    await exportMedia(audioSource, [{ start: 1, end: 2 }, { start: 4, end: 5 }], out, 'm4a', { onProgress: () => {} })
+    const probe = await ffprobeJson(out)
+    expect(Number(probe.format?.duration)).toBeCloseTo(2, 0)
+
+    await expect(
+      exportMedia(audioSource, [{ start: 1, end: 2 }], join(tmp, 'nope.mp4'), 'mp4', { onProgress: () => {} })
+    ).rejects.toThrow(/no video stream/i)
+    expect(existsSync(join(tmp, 'nope.mp4'))).toBe(false)
   }, 60_000)
 
   // Gated on the same runtime capability that gates the UI: homebrew's current

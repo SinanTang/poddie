@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { runTool, runToolBuffer, runToolProgress } from './ffmpeg'
-import type { AudioExtractResult, PeaksResult, VideoInfo } from '../shared/types'
+import type { AudioExtractResult, MediaInfo, PeaksResult } from '../shared/types'
 
 interface FfprobeStream {
   codec_type?: string
@@ -22,6 +22,10 @@ interface FfprobeOutput {
 
 /** Codecs Chromium's bundled decoders handle; anything else needs a preview proxy. */
 const CHROMIUM_PLAYABLE = new Set(['h264', 'vp8', 'vp9', 'av1'])
+/** Audio codecs Chromium plays natively (pcm_* covers every wav flavor). Notably absent: alac. */
+const CHROMIUM_PLAYABLE_AUDIO = new Set(['aac', 'mp3', 'flac', 'opus', 'vorbis'])
+const isPlayableAudio = (codec: string): boolean =>
+  CHROMIUM_PLAYABLE_AUDIO.has(codec) || codec.startsWith('pcm_')
 
 function parseFps(rate: string | undefined): number {
   if (!rate) return 0
@@ -41,28 +45,31 @@ export async function ffprobeJson(path: string): Promise<FfprobeOutput> {
   return JSON.parse(stdout) as FfprobeOutput
 }
 
-export async function probeVideo(path: string): Promise<VideoInfo> {
+export async function probeMedia(path: string): Promise<MediaInfo> {
   const probe = await ffprobeJson(path)
   const streams = probe.streams ?? []
-  const video = streams.find((s) => s.codec_type === 'video')
-  if (!video || !video.codec_name) throw new Error(`No video stream found in ${path}`)
-  const audio = streams.find((s) => s.codec_type === 'audio')
+  const video = streams.find((s) => s.codec_type === 'video' && s.codec_name)
+  const audio = streams.find((s) => s.codec_type === 'audio' && s.codec_name)
+  if (!video && !audio) throw new Error(`No audio or video stream found in ${path}`)
 
   // iPhone stores coded dims + a rotation flag; report DISPLAY dims (what the
   // viewer sees, and what ffmpeg's auto-rotation produces on transcode)
-  const rotation = video.side_data_list?.find((d) => d.rotation != null)?.rotation ?? 0
+  const rotation = video?.side_data_list?.find((d) => d.rotation != null)?.rotation ?? 0
   const swapped = Math.abs(rotation) % 180 === 90
 
   return {
     path,
     sizeBytes: Number(probe.format?.size ?? 0),
     durationSec: Number(probe.format?.duration ?? 0),
-    width: (swapped ? video.height : video.width) ?? 0,
-    height: (swapped ? video.width : video.height) ?? 0,
-    fps: parseFps(video.avg_frame_rate),
-    videoCodec: video.codec_name,
+    hasVideo: video != null,
+    width: (swapped ? video?.height : video?.width) ?? 0,
+    height: (swapped ? video?.width : video?.height) ?? 0,
+    fps: parseFps(video?.avg_frame_rate),
+    videoCodec: video?.codec_name ?? null,
     audioCodec: audio?.codec_name ?? null,
-    needsProxy: !CHROMIUM_PLAYABLE.has(video.codec_name)
+    needsProxy: video
+      ? !CHROMIUM_PLAYABLE.has(video.codec_name!)
+      : !isPlayableAudio(audio!.codec_name!)
   }
 }
 
@@ -98,10 +105,10 @@ export async function extractAudio(
 }
 
 /**
- * Create (or return the cached) H.264 preview proxy for codecs Chromium can't
- * decode (iPhone HEVC). 540px on the short side is plenty for preview; export
- * always cuts the original. Tries the hardware encoder first, falls back to
- * libx264 if VideoToolbox rejects the input.
+ * Create (or return the cached) preview proxy for codecs Chromium can't decode.
+ * Video sources (iPhone HEVC) → H.264 mp4, 540px short side — plenty for
+ * preview, hardware encoder first with libx264 fallback. Audio-only sources
+ * (e.g. ALAC m4a) → AAC m4a. Export always cuts the original, never the proxy.
  */
 export async function ensurePreviewProxy(
   videoPath: string,
@@ -110,10 +117,26 @@ export async function ensurePreviewProxy(
 ): Promise<{ proxyPath: string }> {
   await mkdir(cacheDir, { recursive: true })
   const source = await stat(videoPath)
+  const probe = await ffprobeJson(videoPath)
+  const durationSec = Number(probe.format?.duration ?? 0)
+  const hasVideo = (probe.streams ?? []).some((s) => s.codec_type === 'video' && s.codec_name)
+
+  if (!hasVideo) {
+    const proxyPath = join(cacheDir, `${cacheKeyFor(videoPath, source)}.proxy.m4a`)
+    if (await stat(proxyPath).catch(() => null)) return { proxyPath }
+    const partPath = `${proxyPath}.part.m4a`
+    await runToolProgress(
+      'ffmpeg',
+      ['-y', '-i', videoPath, '-vn', '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart', partPath],
+      durationSec,
+      onProgress
+    )
+    await rename(partPath, proxyPath)
+    return { proxyPath }
+  }
+
   const proxyPath = join(cacheDir, `${cacheKeyFor(videoPath, source)}.proxy.mp4`)
   if (await stat(proxyPath).catch(() => null)) return { proxyPath }
-
-  const durationSec = Number((await ffprobeJson(videoPath)).format?.duration ?? 0)
   const partPath = `${proxyPath}.part.mp4`
   const argsFor = (encoder: string[]): string[] => [
     '-y',

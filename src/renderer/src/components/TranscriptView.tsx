@@ -9,7 +9,7 @@ import type { SaveStatus } from '../App'
 interface TranscriptViewProps {
   items: EditItem[]
   segments: TranscriptSegment[]
-  videoEl: HTMLVideoElement | null
+  videoEl: HTMLMediaElement | null
   matches: MatchRange[]
   activeMatch: number
   /** Delete-key semantics over an inclusive item range (remove, or restore if all removed). */

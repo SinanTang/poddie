@@ -3,8 +3,8 @@ import { IPC, type PoddieApi, type TranscribeProgress } from '../shared/types'
 
 const api: PoddieApi = {
   getAppInfo: () => ipcRenderer.invoke(IPC.appInfo),
-  selectVideo: () => ipcRenderer.invoke(IPC.selectVideo),
-  openVideoPath: (path) => ipcRenderer.invoke(IPC.openVideoPath, path),
+  selectMedia: () => ipcRenderer.invoke(IPC.selectMedia),
+  openMediaPath: (path) => ipcRenderer.invoke(IPC.openMediaPath, path),
   pathForFile: (file) => webUtils.getPathForFile(file),
   extractAudio: (videoPath) => ipcRenderer.invoke(IPC.extractAudio, videoPath),
   getApiKeyStatus: () => ipcRenderer.invoke(IPC.apiKeyStatus),
