@@ -12,6 +12,13 @@ export interface EditItem {
   start: number
   end: number
   removed: boolean
+  /**
+   * Fine-tuned cut boundaries for a removed item whose red waveform region was
+   * dragged inside the token. Absent → the cut uses the token's full span.
+   * Only meaningful when `removed`; the token keeps `start`/`end` for seek/captions.
+   */
+  cutStart?: number
+  cutEnd?: number
 }
 
 export interface EditState {
@@ -60,11 +67,14 @@ export function removedRanges(items: EditItem[], gapMinSec = GAP_MIN_SEC): TimeR
   const ranges: TimeRange[] = []
   for (const item of items) {
     if (!item.removed) continue
+    // A fine-tuned cut uses its dragged boundaries; otherwise the token's full span.
+    const start = item.cutStart ?? item.start
+    const end = item.cutEnd ?? item.end
     const last = ranges[ranges.length - 1]
-    if (last && item.start - last.end < gapMinSec) {
-      last.end = Math.max(last.end, item.end)
+    if (last && start - last.end < gapMinSec) {
+      last.end = Math.max(last.end, end)
     } else {
-      ranges.push({ start: item.start, end: item.end })
+      ranges.push({ start, end })
     }
   }
   return ranges
@@ -122,6 +132,57 @@ export function toggleRangeChanges(items: EditItem[], from: number, to: number):
     if (items[i].removed !== next) {
       changes.push({ index: i, prev: { removed: items[i].removed }, next: { removed: next } })
     }
+  }
+  return changes
+}
+
+/**
+ * Fine-tune one cut to span exactly [newStart, newEnd] (from dragging a cut's
+ * edge on the waveform) instead of snapping to token edges. Recomputes state
+ * over the union window of the old and new spans so the drag both extends
+ * (covers/partially-cuts more tokens) and shrinks (restores exposed tokens):
+ *
+ *   - token fully inside the new span → plain `removed`, overrides cleared
+ *   - token straddling a boundary      → `removed` + partial cutStart/cutEnd
+ *   - token now outside the new span    → restored (removed:false, overrides cleared)
+ *
+ * Item COUNT is untouched, so undo/redo indices stay valid. Callers clamp
+ * [newStart, newEnd] to neighbouring cuts and [0, duration].
+ */
+export function setCutSpanChanges(
+  items: EditItem[],
+  oldStart: number,
+  oldEnd: number,
+  newStart: number,
+  newEnd: number
+): ItemChange[] {
+  const lo = Math.min(oldStart, newStart)
+  const hi = Math.max(oldEnd, newEnd)
+  const changes: ItemChange[] = []
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i]
+    if (it.end <= lo || it.start >= hi) continue // outside the window this resize can touch
+
+    const inCut = it.end > newStart && it.start < newEnd
+    const removed = inCut
+    const cutStart = inCut && it.start < newStart ? newStart : undefined
+    const cutEnd = inCut && it.end > newEnd ? newEnd : undefined
+
+    const prev: ItemPatch = {}
+    const next: ItemPatch = {}
+    if (it.removed !== removed) {
+      prev.removed = it.removed
+      next.removed = removed
+    }
+    if ((it.cutStart ?? undefined) !== cutStart) {
+      prev.cutStart = it.cutStart
+      next.cutStart = cutStart
+    }
+    if ((it.cutEnd ?? undefined) !== cutEnd) {
+      prev.cutEnd = it.cutEnd
+      next.cutEnd = cutEnd
+    }
+    if (Object.keys(next).length > 0) changes.push({ index: i, prev, next })
   }
   return changes
 }

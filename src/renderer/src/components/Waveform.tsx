@@ -15,18 +15,28 @@ interface WaveformProps {
   /** The app's <video> or <audio> element — wavesurfer binds to it for time/seek sync. */
   mediaEl: HTMLMediaElement
   peaks: PeaksResult
-  /** Removed spans, shaded red on the waveform. */
+  /** Removed spans, shaded red on the waveform. Order matches the cut index. */
   removedRanges: TimeRange[]
   /** User dragged a selection on the waveform → delete that time span. */
   onRangeSelect: (start: number, end: number) => void
+  /** User dragged the edge of cut #index → retarget it to [start, end]. */
+  onCutResize: (index: number, start: number, end: number) => void
 }
 
-export function Waveform({ mediaEl, peaks, removedRanges, onRangeSelect }: WaveformProps): React.JSX.Element {
+export function Waveform({
+  mediaEl,
+  peaks,
+  removedRanges,
+  onRangeSelect,
+  onCutResize
+}: WaveformProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WaveSurfer | null>(null)
   const regionsRef = useRef<RegionsPlugin | null>(null)
   const onRangeSelectRef = useRef(onRangeSelect)
   onRangeSelectRef.current = onRangeSelect
+  const onCutResizeRef = useRef(onCutResize)
+  onCutResizeRef.current = onCutResize
   const [ready, setReady] = useState(false)
   /** Current zoom in px/s; 0 = fit whole file to the container (resize-proof). */
   const [pxPerSec, setPxPerSec] = useState(0)
@@ -79,6 +89,12 @@ export function Waveform({ mediaEl, peaks, removedRanges, onRangeSelect }: Wavef
       region.remove()
       if (end - start > 0.05) onRangeSelectRef.current(start, end)
     })
+    // fires once on release (update-end) — a cut region's edge was dragged
+    regions.on('region-updated', (region) => {
+      if (!region.id.startsWith(CUT_ID)) return
+      const index = Number(region.id.slice(CUT_ID.length))
+      if (Number.isInteger(index)) onCutResizeRef.current(index, region.start, region.end)
+    })
     regionsRef.current = regions
     wsRef.current = ws
     return () => {
@@ -103,8 +119,8 @@ export function Waveform({ mediaEl, peaks, removedRanges, onRangeSelect }: Wavef
         start: r.start,
         end: r.end,
         color: CUT_COLOR,
-        drag: false,
-        resize: false
+        drag: false, // body isn't draggable — only the edges, to fine-tune the cut
+        resize: true
       })
     })
   }, [removedRanges, mediaEl, peaks])
@@ -159,7 +175,7 @@ export function Waveform({ mediaEl, peaks, removedRanges, onRangeSelect }: Wavef
         >
           Fit
         </button>
-        <span className="wave-hint">⌘-scroll to zoom · drag selects a cut</span>
+        <span className="wave-hint">⌘-scroll to zoom · drag selects a cut · drag a cut edge to fine-tune</span>
       </div>
     </div>
   )

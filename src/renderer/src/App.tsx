@@ -7,6 +7,7 @@ import {
   keptRanges,
   mergeWithPrevChanges,
   removedRanges,
+  setCutSpanChanges,
   textEditChanges,
   toggleRangeChanges,
   trimSilenceChanges,
@@ -397,6 +398,23 @@ export default function App(): React.JSX.Element {
   const kept = useMemo(
     () => (items && media ? keptRanges(items, media.durationSec) : []),
     [items, media]
+  )
+
+  // waveform cut-edge drag: retarget cut #index to the dragged span, clamped so
+  // it can't cross a neighbouring cut or the file bounds
+  const onCutResize = useCallback(
+    (index: number, start: number, end: number) => {
+      if (!items) return
+      const old = cuts[index]
+      if (!old) return
+      const lo = index > 0 ? cuts[index - 1].end : 0
+      const hi = index < cuts.length - 1 ? cuts[index + 1].start : (media?.durationSec ?? end)
+      const ns = Math.max(lo, Math.min(start, hi))
+      const ne = Math.max(ns, Math.min(end, hi))
+      if (ne - ns < 0.03) return // ignore a collapsed drag; use the transcript to restore a cut
+      applyEdit(setCutSpanChanges(items, old.start, old.end, ns, ne))
+    },
+    [items, cuts, media, applyEdit]
   )
 
   // preview controller: while playing, hop over removed ranges
@@ -843,7 +861,13 @@ export default function App(): React.JSX.Element {
 
           <footer className="wave-pane">
             {videoEl && peaks ? (
-              <Waveform mediaEl={videoEl} peaks={peaks} removedRanges={cuts} onRangeSelect={onWaveformSelect} />
+              <Waveform
+                mediaEl={videoEl}
+                peaks={peaks}
+                removedRanges={cuts}
+                onRangeSelect={onWaveformSelect}
+                onCutResize={onCutResize}
+              />
             ) : (
               <div className="waveform-placeholder" />
             )}
