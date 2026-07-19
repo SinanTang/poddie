@@ -9,7 +9,7 @@ import type { TimeRange } from '../shared/edit'
 import { computePeaks, ensurePreviewProxy, extractAudio, ffprobeJson, probeMedia } from './media'
 import { startMediaServer, type MediaServer } from './media-server'
 import { clearApiKey, getApiKey, getApiKeyStatus, loadEnvFile, setApiKey } from './config'
-import { loadProject, projectPathFor, saveProject } from './project'
+import { loadProject, saveEdit } from './project'
 import type { EditState } from '../shared/edit'
 import { transcribeVideo } from './transcribe'
 import { modelPathIn, probeLocalWhisper } from './whisper-local'
@@ -148,10 +148,7 @@ app.whenReady().then(async () => {
   )
 
   handleIpc(IPC.projectSaveEdit, async (_event, videoPath: string, edit: EditState, engine?: TranscribeEngine) => {
-    const project = await loadProject(videoPath, asEngine(engine))
-    if (!project) throw new Error(`No project file to save edits into (${projectPathFor(videoPath, asEngine(engine))} missing)`)
-    project.edit = edit
-    await saveProject(project, asEngine(engine))
+    await saveEdit(videoPath, edit, asEngine(engine))
     log('info', 'edit', `saved: ${edit.items.filter((i) => i.removed).length} of ${edit.items.length} items removed`)
   })
 

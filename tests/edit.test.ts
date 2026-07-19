@@ -5,6 +5,7 @@ import {
   keptRanges,
   mergeWithPrevChanges,
   removedRanges,
+  setCutSpanChanges,
   textEditChanges,
   toggleRangeChanges,
   trimSilenceChanges,
@@ -235,6 +236,62 @@ describe('trimSilenceChanges', () => {
     const changes = trimSilenceChanges(items)
     const roundTrip = applyChanges(applyChanges(items, changes, 'next'), changes, 'prev')
     expect(roundTrip).toEqual(items)
+  })
+})
+
+describe('setCutSpanChanges (draggable cut edges)', () => {
+  // four contiguous words, no gap tokens; a cut over B+C reads as one region [1,3]
+  const base = (): EditItem[] => [
+    { kind: 'word', text: 'A', start: 0, end: 1, removed: false },
+    { kind: 'word', text: 'B', start: 1, end: 2, removed: true },
+    { kind: 'word', text: 'C', start: 2, end: 3, removed: true },
+    { kind: 'word', text: 'D', start: 3, end: 4, removed: false }
+  ]
+  const resized = (items: EditItem[], os: number, oe: number, ns: number, ne: number): EditItem[] =>
+    applyChanges(items, setCutSpanChanges(items, os, oe, ns, ne), 'next')
+
+  test('removedRanges honours cutStart/cutEnd overrides', () => {
+    const items = base()
+    items[1] = { ...items[1], cutStart: 1.4 }
+    items[2] = { ...items[2], cutEnd: 2.6 }
+    expect(removedRanges(items)).toEqual([{ start: 1.4, end: 2.6 }])
+  })
+
+  test('shrinking a boundary edge writes a partial cut on that token only', () => {
+    const items = resized(base(), 1, 3, 1.4, 3)
+    expect(items[1].cutStart).toBe(1.4)
+    expect(items[2].cutStart).toBeUndefined()
+    expect(removedRanges(items)).toEqual([{ start: 1.4, end: 3 }])
+  })
+
+  test('extending an edge into a kept neighbour removes it with a partial boundary', () => {
+    const items = resized(base(), 1, 3, 0.5, 3)
+    expect(items[0]).toMatchObject({ removed: true, cutStart: 0.5 })
+    expect(removedRanges(items)).toEqual([{ start: 0.5, end: 3 }])
+  })
+
+  test('shrinking past a token restores it and clears its override', () => {
+    let items = resized(base(), 1, 3, 1, 2.4) // C now partial [2,2.4]
+    expect(items[2]).toMatchObject({ removed: true, cutEnd: 2.4 })
+    items = resized(items, 1, 2.4, 1, 1.8) // pull inside B → C fully exposed
+    expect(items[2]).toMatchObject({ removed: false })
+    expect(items[2].cutEnd).toBeUndefined()
+    expect(removedRanges(items)).toEqual([{ start: 1, end: 1.8 }])
+  })
+
+  test('interior cut: both edges inside one token keep the ends, drop the middle', () => {
+    const gap: EditItem[] = [{ kind: 'gap', text: '', start: 0, end: 10, removed: true }]
+    const items = resized(gap, 0, 10, 3, 7)
+    expect(items[0]).toMatchObject({ cutStart: 3, cutEnd: 7 })
+    expect(keptRanges(items, 10)).toEqual([{ start: 0, end: 3 }, { start: 7, end: 10 }])
+  })
+
+  test('undo restores the exact prior state including cleared overrides', () => {
+    const items = base()
+    const changes = setCutSpanChanges(items, 1, 3, 0.5, 2.4)
+    const forward = applyChanges(items, changes, 'next')
+    const back = applyChanges(forward, changes, 'prev')
+    expect(back).toEqual(items)
   })
 })
 
