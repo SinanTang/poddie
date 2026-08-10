@@ -631,15 +631,6 @@ progress {
   background: #26282e;
 }
 
-.review-row.accepted {
-  background: rgba(52, 211, 153, 0.08);
-  box-shadow: inset 2px 0 0 #34d399;
-}
-
-.review-row.rejected {
-  opacity: 0.4;
-}
-
 .review-time {
   color: #6b7280;
   font-size: 11px;
@@ -652,33 +643,6 @@ progress {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.review-actions {
-  display: flex;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.review-actions button {
-  padding: 0 8px;
-  font-size: 12px;
-  line-height: 1.6;
-  background: transparent;
-  border: 1px solid #34373f;
-  color: #9ca3af;
-}
-
-.review-actions .accept.on {
-  background: rgba(52, 211, 153, 0.2);
-  border-color: #34d399;
-  color: #34d399;
-}
-
-.review-actions .reject.on {
-  background: rgba(248, 113, 113, 0.15);
-  border-color: #f87171;
-  color: #f87171;
 }
 
 .review-empty {

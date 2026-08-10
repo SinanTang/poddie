@@ -20,7 +20,7 @@ import { buildSearchIndex, findMatches } from './lib/transcript'
 import { errText } from './lib/errors'
 import { FeedbackDialog } from './components/FeedbackDialog'
 import { SearchBar } from './components/SearchBar'
-import { ReviewPanel, type Decision } from './components/ReviewPanel'
+import { ReviewPanel } from './components/ReviewPanel'
 import { TranscriptView } from './components/TranscriptView'
 import { Waveform } from './components/Waveform'
 import type {
@@ -204,9 +204,7 @@ interface EditHistory {
 
 interface ReviewState {
   title: string
-  /** Snapshot taken when the panel opens; stale entries are skipped at apply. */
   suggestions: Suggestion[]
-  decisions: Map<number, Decision>
 }
 
 export default function App(): React.JSX.Element {
@@ -403,40 +401,15 @@ export default function App(): React.JSX.Element {
   const silenceTrims = useMemo(() => (items ? trimSilenceChanges(items) : []), [items])
   const onTrimSilences = useCallback(() => applyEdit(silenceTrims), [silenceTrims, applyEdit])
 
-  // Suggestion review (filler list now, LLM punctuation in Phase 4). The live
-  // count drives the toolbar button; opening snapshots the suggestions so row
-  // ids stay stable while the user works — apply re-validates against current
-  // items and skips anything stale (shared/cleanup.ts).
   const [review, setReview] = useState<ReviewState | null>(null)
   const fillerCount = useMemo(() => (items ? findFillerSuggestions(items).length : 0), [items])
 
-  const openFillerReview = useCallback(() => {
+  const removeFillers = useCallback(() => {
     if (!items) return
-    setReview({ title: 'Filler words', suggestions: findFillerSuggestions(items), decisions: new Map() })
-  }, [items])
-
-  // Toggle semantics: re-deciding the same way reverts to pending
-  const onDecide = useCallback((ids: number[], decision: Decision) => {
-    setReview((r) => {
-      if (!r) return r
-      const decisions = new Map(r.decisions)
-      const allSame = ids.every((id) => decisions.get(id) === decision)
-      for (const id of ids) {
-        if (allSame) decisions.delete(id)
-        else decisions.set(id, decision)
-      }
-      return { ...r, decisions }
-    })
-  }, [])
-
-  const applyReview = useCallback(() => {
-    setReview((r) => {
-      if (r && items) {
-        const accepted = r.suggestions.filter((s) => r.decisions.get(s.id) === 'accepted')
-        applyEdit(suggestionChanges(items, accepted))
-      }
-      return null
-    })
+    const suggestions = findFillerSuggestions(items)
+    if (suggestions.length === 0) return
+    applyEdit(suggestionChanges(items, suggestions))
+    setReview({ title: 'Filler words', suggestions })
   }, [items, applyEdit])
 
   const seekToItem = useCallback(
@@ -733,11 +706,8 @@ export default function App(): React.JSX.Element {
                 <ReviewPanel
                   title={review.title}
                   suggestions={review.suggestions}
-                  decisions={review.decisions}
                   items={items}
-                  onDecide={onDecide}
                   onSeek={seekToItem}
-                  onApply={applyReview}
                   onClose={() => setReview(null)}
                 />
               )}
@@ -754,7 +724,7 @@ export default function App(): React.JSX.Element {
                   silenceTrimCount={silenceTrims.length}
                   onTrimSilences={onTrimSilences}
                   fillerCount={fillerCount}
-                  onFindFillers={openFillerReview}
+                  onRemoveFillers={removeFillers}
                   canUndo={(editState?.past.length ?? 0) > 0}
                   canRedo={(editState?.future.length ?? 0) > 0}
                   onUndo={undo}
