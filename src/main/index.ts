@@ -8,11 +8,12 @@ import { hasFilter } from './ffmpeg'
 import type { TimeRange } from '../shared/edit'
 import { computePeaks, ensurePreviewProxy, extractAudio, ffprobeJson, probeMedia } from './media'
 import { startMediaServer, type MediaServer } from './media-server'
-import { clearApiKey, getApiKey, getApiKeyStatus, loadEnvFile, setApiKey } from './config'
-import { loadProject, saveEdit } from './project'
+import { clearApiKey, getApiKey, getApiKeyStatus, getLlmConfig, loadEnvFile, setApiKey } from './config'
+import { loadProject, saveChapters, saveEdit } from './project'
 import type { EditState } from '../shared/edit'
 import { transcribeVideo } from './transcribe'
 import { modelPathIn, probeLocalWhisper } from './whisper-local'
+import { analyzeChapters, probeLocalLlm } from './llm'
 import { asFeedbackCategory, buildFeedbackUrl, type FeedbackTechInfo } from '../shared/feedback'
 import { getLogPath, initLogger, log, logError } from './logger'
 import { fmtDuration, whisperCostUsd } from '../shared/format'
@@ -82,6 +83,10 @@ app.whenReady().then(async () => {
   if (!canBurnCaptions) log('info', 'captions', 'ffmpeg lacks the subtitles filter (libass) — burn-in disabled')
   const localWhisper = await probeLocalWhisper(modelsDir)
   if (!localWhisper.available) log('info', 'whisper-local', `local transcription disabled: ${localWhisper.hint}`)
+  const llmCfg = await getLlmConfig(app.getPath('userData'))
+  const localLlm = await probeLocalLlm(llmCfg)
+  if (!localLlm.available) log('info', 'llm', `local LLM disabled: ${localLlm.hint}`)
+  else if (!localLlm.modelPresent) log('info', 'llm', `Ollama available but model ${llmCfg.model} missing: ${localLlm.hint}`)
 
   // engine comes over IPC — normalize instead of trusting the wire; anything
   // unrecognized falls back to the app default (local: free, fully offline)
@@ -92,7 +97,8 @@ app.whenReady().then(async () => {
     mediaBaseUrl: mediaServer!.baseUrl,
     canBurnCaptions,
     // modelPresent flips after the first in-app download — re-probe per call
-    localWhisper: localWhisper.available ? await probeLocalWhisper(modelsDir) : localWhisper
+    localWhisper: localWhisper.available ? await probeLocalWhisper(modelsDir) : localWhisper,
+    localLlm: await probeLocalLlm(llmCfg)
   }))
 
   const VIDEO_EXTENSIONS = ['mov', 'mp4', 'm4v']
@@ -150,6 +156,20 @@ app.whenReady().then(async () => {
   handleIpc(IPC.projectSaveEdit, async (_event, videoPath: string, edit: EditState, engine?: TranscribeEngine) => {
     await saveEdit(videoPath, edit, asEngine(engine))
     log('info', 'edit', `saved: ${edit.items.filter((i) => i.removed).length} of ${edit.items.length} items removed`)
+  })
+
+  handleIpc(IPC.projectSaveChapters, async (_event, videoPath: string, chapters: import('../shared/types').ChapterAnalysis, engine?: TranscribeEngine) => {
+    await saveChapters(videoPath, chapters, asEngine(engine))
+    log('info', 'chapters', `saved: ${chapters.chapters.length} chapters`)
+  })
+
+  handleIpc(IPC.llmChapters, async (_event, videoPath: string, engineArg?: TranscribeEngine) => {
+    const engine = asEngine(engineArg)
+    const project = await loadProject(videoPath, engine)
+    if (!project?.transcript) throw new Error('No transcript — transcribe first')
+    const result = await analyzeChapters(llmCfg, project.transcript.words, project.transcript.segments, project.transcript.durationSec)
+    await saveChapters(videoPath, result, engine)
+    return result
   })
 
   handleIpc(IPC.transcribeStart, async (event, videoPath: string, engineArg?: TranscribeEngine) => {

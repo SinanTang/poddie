@@ -12,6 +12,8 @@ const api: PoddieApi = {
   clearApiKey: () => ipcRenderer.invoke(IPC.apiKeyClear),
   loadProject: (videoPath, engine) => ipcRenderer.invoke(IPC.projectLoad, videoPath, engine),
   saveEdit: (videoPath, edit, engine) => ipcRenderer.invoke(IPC.projectSaveEdit, videoPath, edit, engine),
+  saveChapters: (videoPath, chapters, engine) => ipcRenderer.invoke(IPC.projectSaveChapters, videoPath, chapters, engine),
+  analyzeChapters: (videoPath, engine) => ipcRenderer.invoke(IPC.llmChapters, videoPath, engine),
   transcribe: (videoPath, engine) => ipcRenderer.invoke(IPC.transcribeStart, videoPath, engine),
   onTranscribeProgress: (cb) => {
     const listener = (_event: IpcRendererEvent, p: TranscribeProgress): void => cb(p)

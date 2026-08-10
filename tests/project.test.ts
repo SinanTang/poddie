@@ -2,8 +2,8 @@ import { beforeAll, describe, expect, test } from 'vitest'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { fingerprintOf, loadProject, projectPathFor, saveEdit, saveProject } from '../src/main/project'
-import type { Project } from '../src/shared/types'
+import { fingerprintOf, loadProject, projectPathFor, saveChapters, saveEdit, saveProject } from '../src/main/project'
+import type { ChapterAnalysis, Project } from '../src/shared/types'
 
 const tmp = fileURLToPath(new URL('.tmp-project', import.meta.url))
 const videoPath = join(tmp, 'clip.mov')
@@ -107,5 +107,30 @@ describe('project persistence', () => {
 
     expect((await loadProject(videoPath, 'local'))?.transcript?.model).toBe('whisper.cpp large-v3-turbo')
     expect(await loadProject(videoPath, 'api')).toEqual(apiBefore) // untouched
+  })
+
+  test('saveChapters persists chapter analysis into the project file', async () => {
+    const chapters: ChapterAnalysis = {
+      chapters: [{
+        title: 'Intro',
+        startTime: 0,
+        endTime: 60,
+        summary: 'Opening',
+        subchapters: [{
+          title: 'Hook',
+          startTime: 0,
+          endTime: 30,
+          summary: 'The opening hook',
+          editorialVerdict: 'Strong start',
+          kept: true
+        }]
+      }],
+      model: 'qwen3:8b',
+      createdAt: '2026-08-10T00:00:00.000Z'
+    }
+    await saveChapters(videoPath, chapters)
+    const loaded = await loadProject(videoPath)
+    expect(loaded!.chapters).toEqual(chapters)
+    expect(loaded!.transcript).toBeDefined()
   })
 })
