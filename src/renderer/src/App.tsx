@@ -21,11 +21,13 @@ import { errText } from './lib/errors'
 import { FeedbackDialog } from './components/FeedbackDialog'
 import { SearchBar } from './components/SearchBar'
 import { ReviewPanel } from './components/ReviewPanel'
+import { ChapterPanel } from './components/ChapterPanel'
 import { TranscriptView } from './components/TranscriptView'
 import { Waveform } from './components/Waveform'
 import type {
   ApiKeyStatus,
   AppInfo,
+  ChapterAnalysis,
   MediaInfo,
   PeaksResult,
   Project,
@@ -303,9 +305,14 @@ export default function App(): React.JSX.Element {
     }
     dirtyRef.current = false
     setSaveStatus({ state: 'clean' })
+    setChapters(project?.chapters ?? null)
   }, [project])
 
   const items = editState?.items ?? null
+
+  const [chapters, setChapters] = useState<ChapterAnalysis | null>(null)
+  const [chapterPanelOpen, setChapterPanelOpen] = useState(false)
+  const [analyzingChapters, setAnalyzingChapters] = useState(false)
 
   const applyEdit = useCallback((changes: ItemChange[]) => {
     if (changes.length === 0) return
@@ -417,6 +424,67 @@ export default function App(): React.JSX.Element {
       if (videoEl && items?.[index]) videoEl.currentTime = items[index].start + 0.001
     },
     [videoEl, items]
+  )
+
+  const onChapterButton = useCallback(async () => {
+    if (chapters) {
+      setChapterPanelOpen((o) => !o)
+      return
+    }
+    if (!media || analyzingChapters) return
+    setAnalyzingChapters(true)
+    try {
+      const result = await window.poddie.analyzeChapters(media.path, engine)
+      setChapters(result)
+      setChapterPanelOpen(true)
+    } catch (err) {
+      setError(`Chapter analysis failed: ${errText(err)}`)
+    } finally {
+      setAnalyzingChapters(false)
+    }
+  }, [chapters, media, engine, analyzingChapters])
+
+  const onToggleChapterKept = useCallback((chapterIdx: number, subIdx: number) => {
+    setChapters((prev) => {
+      if (!prev) return prev
+      const next: ChapterAnalysis = {
+        ...prev,
+        chapters: prev.chapters.map((ch, ci) =>
+          ci !== chapterIdx ? ch : {
+            ...ch,
+            subchapters: ch.subchapters.map((sub, si) =>
+              si !== subIdx ? sub : { ...sub, kept: !sub.kept }
+            )
+          }
+        )
+      }
+      if (media) window.poddie.saveChapters(media.path, next, engine).catch(() => {})
+      return next
+    })
+  }, [media, engine])
+
+  const applyChapterCuts = useCallback(() => {
+    if (!chapters || !items) return
+    const changes: ItemChange[] = []
+    for (const ch of chapters.chapters) {
+      for (const sub of ch.subchapters) {
+        if (sub.kept) continue
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i]
+          if (item.removed || item.kind !== 'word') continue
+          if (item.start >= sub.startTime && item.end <= sub.endTime) {
+            changes.push({ index: i, prev: { removed: false }, next: { removed: true } })
+          }
+        }
+      }
+    }
+    if (changes.length > 0) applyEdit(changes)
+    setChapterPanelOpen(false)
+  }, [chapters, items, applyEdit])
+
+  const seekToTime = useCallback(
+    (sec: number) => { if (videoEl) videoEl.currentTime = sec },
+    [videoEl]
   )
 
   const cuts = useMemo(() => (items ? removedRanges(items) : []), [items])
@@ -702,6 +770,15 @@ export default function App(): React.JSX.Element {
         <>
           <div className="workspace">
             <div className="transcript-pane">
+              {chapterPanelOpen && chapters && (
+                <ChapterPanel
+                  chapters={chapters}
+                  onToggleKept={onToggleChapterKept}
+                  onSeek={seekToTime}
+                  onApply={applyChapterCuts}
+                  onClose={() => setChapterPanelOpen(false)}
+                />
+              )}
               {review && items && (
                 <ReviewPanel
                   title={review.title}
@@ -725,6 +802,10 @@ export default function App(): React.JSX.Element {
                   onTrimSilences={onTrimSilences}
                   fillerCount={fillerCount}
                   onRemoveFillers={removeFillers}
+                  llmAvailable={appInfo?.localLlm?.available === true && appInfo?.localLlm?.modelPresent === true}
+                  hasChapters={chapters !== null}
+                  analyzingChapters={analyzingChapters}
+                  onChapterCuration={onChapterButton}
                   canUndo={(editState?.past.length ?? 0) > 0}
                   canRedo={(editState?.future.length ?? 0) > 0}
                   onUndo={undo}

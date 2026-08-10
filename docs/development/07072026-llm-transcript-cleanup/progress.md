@@ -106,3 +106,21 @@
     0–2674s coverage, 3 chapters / 8 subchapters, 270s wall-clock.
     Editorial notes somewhat generic but acceptable for v1.
 - Next: Phase 4 (chapter curation UI).
+
+## Session 2026-08-10 (cont.) — Phase 4 built (user check pending)
+- components/ChapterPanel.tsx (new): main chapters with subchapters,
+  per-subchapter keep/cut toggle (✓/✗), time range, title, summary,
+  editorial note. Click row → seek video. "Apply N cuts" in header.
+  Cut subchapters dimmed (opacity 0.45). Esc closes.
+- App.tsx: chapters state (loaded from project, set after LLM analysis),
+  chapterPanelOpen, analyzingChapters. onChapterButton (first click →
+  LLM analysis, subsequent → toggle panel), onToggleChapterKept (toggle +
+  persist via saveChapters), applyChapterCuts (mark word items in cut
+  subchapter time ranges as removed, one undo step).
+- TranscriptView.tsx: "📑 Chapters (AI)" button between "Remove fillers"
+  and "Undo", gated on llmAvailable. Shows "⏳ Analyzing…" during LLM
+  call, changes to "📑 Chapters" once results exist.
+- app.css: .chapter-* styles (panel, header, list, group, main, sub,
+  toggle kept/cut, sub-body/title/summary/note).
+- Verified: tsc, eslint, 155 tests, build all clean.
+- Next: USER CHECK on real footage.

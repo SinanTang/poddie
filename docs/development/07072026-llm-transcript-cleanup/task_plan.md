@@ -128,13 +128,13 @@ interface Suggestion {
 - [x] Spike on real 44-min zh episode: 3 chapters / 8 subchapters, full 0–2674s coverage, 270s wall-clock, 843 output tokens. Editorial notes somewhat generic — acceptable for v1, prompt refinable
 
 ### Phase 4: Chapter curation UI
-**Status**: pending
-- [ ] Toolbar button "Chapter Curation (AI)" between "Remove fillers" and "Undo" — gated on `localLlm.available`; first click triggers LLM summarization (progress indicator), subsequent clicks reopen the saved panel
-- [ ] Chapter panel above transcript: story-arc main chapters (intro / struggle / insight / takeaway or whatever fits the content), each with subchapters. Per-subchapter: time range, summary, editorial note, keep/cut toggle. Click row → seek video
-- [ ] Editorial notes: LLM-generated margin-scribble style, specific to the content (e.g. "Great origin story", "Repeats the point from 12:00", "Fun tangent, not essential") — NOT fixed taxonomy labels
-- [ ] "Apply cuts" action: removes all cut-toggled subchapters as one undo step via existing toggleRangeChanges; user can undo or restore inline
-- [ ] Keep/cut decisions persisted in project file so the user can close and revisit
-- [ ] USER CHECK on real footage
+**Status**: built ✅ 2026-08-10 (tsc/eslint/155 tests/build all clean) — awaiting USER CHECK
+- [x] Toolbar button "📑 Chapters (AI)" between "Remove fillers" and "Undo" — gated on `localLlm.available && modelPresent`; first click triggers LLM analysis (shows "⏳ Analyzing…"), subsequent clicks toggle the saved panel; button changes to "📑 Chapters" once analysis exists
+- [x] ChapterPanel.tsx above transcript: main chapters (time range, title, summary, click to seek) with subchapters (keep/cut toggle ✓/✗, timestamp, title, summary, editorial note). Collapsible subchapter rows dim when cut
+- [x] "Apply N cuts" button in panel header: removes all cut-toggled subchapters as one undo step by marking overlapping word items removed; user can undo or restore inline
+- [x] Keep/cut decisions persist immediately on toggle (saveChapters IPC) — user can close panel, reopen, decisions survive app restarts
+- [x] Esc closes the panel
+- [ ] USER CHECK on real footage: run `npm run dev`, open the 44-min video, click "📑 Chapters (AI)", wait ~5 min, review the chapter structure, toggle some subchapters off, apply cuts, verify undo works
 
 ### Phase 5: Punctuation (deferred, lower priority)
 **Status**: deferred

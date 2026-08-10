@@ -24,6 +24,13 @@ interface TranscriptViewProps {
   /** Live filler-list match count (0 disables the button); clicking removes all fillers. */
   fillerCount: number
   onRemoveFillers: () => void
+  /** Whether the local LLM is available and model is present. */
+  llmAvailable: boolean
+  /** Whether chapter analysis results exist (saved or just generated). */
+  hasChapters: boolean
+  /** Whether the LLM is currently analyzing chapters. */
+  analyzingChapters: boolean
+  onChapterCuration: () => void
   canUndo: boolean
   canRedo: boolean
   onUndo: () => void
@@ -224,6 +231,10 @@ export function TranscriptView({
   onTrimSilences,
   fillerCount,
   onRemoveFillers,
+  llmAvailable,
+  hasChapters,
+  analyzingChapters,
+  onChapterCuration,
   canUndo,
   canRedo,
   onUndo,
@@ -429,6 +440,20 @@ export function TranscriptView({
             title="Remove filler words (嗯/那个/um/you know…) — undo to restore all, or restore inline"
           >
             ✂ Remove {fillerCount} fillers
+          </button>
+          <button
+            className="ghost small"
+            onClick={onChapterCuration}
+            disabled={!llmAvailable && !hasChapters}
+            title={
+              !llmAvailable && !hasChapters
+                ? 'Needs Ollama with qwen3:8b — install Ollama and run "ollama pull qwen3:8b"'
+                : hasChapters
+                  ? 'Open chapter curation'
+                  : 'Analyze transcript into chapters with AI'
+            }
+          >
+            {analyzingChapters ? '⏳ Analyzing…' : hasChapters ? '📑 Chapters' : '📑 Chapters (AI)'}
           </button>
           <button className="ghost small" onClick={onUndo} disabled={!canUndo} title="Undo (⌘Z)">
             ↩ Undo
