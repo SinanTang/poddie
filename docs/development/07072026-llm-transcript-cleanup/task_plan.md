@@ -117,13 +117,15 @@ interface Suggestion {
 - [x] Filler cuts render through the existing `.cut` strikethrough — no new rendering path
 - [x] USER CHECK: UX approved 2026-08-10. Original review-per-item flow rejected as too tedious; one-click-remove + inline-restore adopted
 
-### Phase 3: LLM service (main/llm.ts) + Chapter curation
-**Status**: pending — **PRIORITY: chapter curation first, punctuation deferred**
-- [ ] Probe: server version + model presence → `AppInfo.localLlm` (available/hint/modelPresent); injectable fetch (whisper.ts pattern), never assume server is up
-- [ ] IPC: `llm:status` + shared chat call helper (reused by chapters and later by punct)
-- [ ] Chapter summarization: send full transcript text → LLM returns story-arc chapters with subchapters, one-line summaries, and editorial notes per subchapter
-- [ ] Chapter data model in shared/cleanup.ts (or shared/chapters.ts): Chapter { title, startTime, endTime, summary, editorialNote, subchapters: Subchapter[] }, Subchapter { title, startTime, endTime, summary, editorialNote, kept: boolean }
-- [ ] Persistence: chapter results stored in project file alongside edit state; first LLM call generates, subsequent opens just load saved data
+### Phase 3: LLM service (main/llm.ts) + Chapter curation backend
+**Status**: complete ✅ 2026-08-10 (tsc/eslint/155 tests/build all clean, spike validated on 44-min episode)
+- [x] Probe: `probeLocalLlm()` → `LocalLlmStatus` (available/hint/modelPresent) via Ollama `/api/tags` with 3s timeout; logged at startup, re-probed per `appInfo` call (model can be pulled mid-session)
+- [x] `AppInfo.localLlm` added — gates AI features in the UI
+- [x] Shared `chat()` helper: Ollama `/api/chat`, structured JSON output (`format: schema`), temperature 0, think off, 10-min timeout, 32k context window
+- [x] Chapter data model in `shared/types.ts`: `Chapter { title, startTime, endTime, summary, subchapters }`, `Subchapter { ..., editorialNote, kept }`, `ChapterAnalysis { chapters, model, createdAt }`
+- [x] `analyzeChapters(words, segments, durationSec)`: builds `[Ns] text` timestamped transcript, story-arc system prompt with explicit duration hint (fixes truncation at 9min), parses + initializes `kept: true` on all subchapters
+- [x] Persistence: `saveChapters()` in project.ts, `chapters` field on `Project`, IPC `llm:chapters` (runs analysis + auto-saves) and `project:saveChapters` (saves keep/cut decisions)
+- [x] Spike on real 44-min zh episode: 3 chapters / 8 subchapters, full 0–2674s coverage, 270s wall-clock, 843 output tokens. Editorial notes somewhat generic — acceptable for v1, prompt refinable
 
 ### Phase 4: Chapter curation UI
 **Status**: pending

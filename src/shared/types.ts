@@ -56,6 +56,8 @@ export interface Project {
   transcript: Transcript | null
   /** Edit state (words + gap tokens with removed flags); null until first edit. */
   edit?: import('./edit').EditState | null
+  /** LLM-generated chapter analysis; null until first chapter curation run. */
+  chapters?: ChapterAnalysis | null
   updatedAt: string
 }
 
@@ -83,6 +85,35 @@ export interface LocalWhisperStatus {
   modelPresent: boolean
 }
 
+export interface LocalLlmStatus {
+  available: boolean
+  hint: string | null
+  modelPresent: boolean
+}
+
+export interface Subchapter {
+  title: string
+  startTime: number
+  endTime: number
+  summary: string
+  editorialNote: string
+  kept: boolean
+}
+
+export interface Chapter {
+  title: string
+  startTime: number
+  endTime: number
+  summary: string
+  subchapters: Subchapter[]
+}
+
+export interface ChapterAnalysis {
+  chapters: Chapter[]
+  model: string
+  createdAt: string
+}
+
 export interface PeaksResult {
   /** Max-abs amplitude per bucket, normalized 0..1. */
   peaks: number[]
@@ -97,6 +128,8 @@ export interface AppInfo {
   canBurnCaptions: boolean
   /** Whether local whisper.cpp transcription is available — gates the engine toggle. */
   localWhisper: LocalWhisperStatus
+  /** Whether local LLM (Ollama) is available — gates AI features (chapter curation, punctuation). */
+  localLlm: LocalLlmStatus
 }
 
 export const IPC = {
@@ -109,6 +142,7 @@ export const IPC = {
   apiKeyClear: 'apiKey:clear',
   projectLoad: 'project:load',
   projectSaveEdit: 'project:saveEdit',
+  projectSaveChapters: 'project:saveChapters',
   transcribeStart: 'transcribe:start',
   transcribeProgress: 'transcribe:progress',
   proxyEnsure: 'proxy:ensure',
@@ -119,6 +153,7 @@ export const IPC = {
   exportPoll: 'export:poll',
   exportReveal: 'export:reveal',
   captionsExport: 'captions:export',
+  llmChapters: 'llm:chapters',
   feedbackTechInfo: 'feedback:techInfo',
   feedbackOpen: 'feedback:open'
 } as const
@@ -142,6 +177,9 @@ export interface PoddieApi {
   /** Engine selects the project file: api → <video>.poddie.json, local → <video>.poddie.local.json. */
   loadProject(videoPath: string, engine: TranscribeEngine): Promise<Project | null>
   saveEdit(videoPath: string, edit: import('./edit').EditState, engine: TranscribeEngine): Promise<void>
+  saveChapters(videoPath: string, chapters: ChapterAnalysis, engine: TranscribeEngine): Promise<void>
+  /** Run LLM chapter analysis on the transcript. Returns the chapter analysis. */
+  analyzeChapters(videoPath: string, engine: TranscribeEngine): Promise<ChapterAnalysis>
   /** Resolves to null when the user cancels the confirmation dialog. */
   transcribe(videoPath: string, engine: TranscribeEngine): Promise<Project | null>
   /** Subscribe to transcription progress; returns an unsubscribe function. */

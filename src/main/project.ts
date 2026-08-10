@@ -1,6 +1,6 @@
 import { readFile, rename, stat, writeFile } from 'node:fs/promises'
 import type { EditState } from '../shared/edit'
-import type { Project, TranscribeEngine, VideoFingerprint } from '../shared/types'
+import type { ChapterAnalysis, Project, TranscribeEngine, VideoFingerprint } from '../shared/types'
 
 /**
  * Each engine owns a separate project file, so a local whisper.cpp
@@ -59,6 +59,21 @@ export async function saveEdit(
     throw new Error(`No project file to save edits into (${projectPathFor(videoPath, engine)} missing)`)
   }
   project.edit = edit
+  project.videoPath = videoPath
+  await saveProject(project, engine)
+  return project
+}
+
+export async function saveChapters(
+  videoPath: string,
+  chapters: ChapterAnalysis,
+  engine: TranscribeEngine = 'api'
+): Promise<Project> {
+  const project = await loadProject(videoPath, engine)
+  if (!project) {
+    throw new Error(`No project file to save chapters into (${projectPathFor(videoPath, engine)} missing)`)
+  }
+  project.chapters = chapters
   project.videoPath = videoPath
   await saveProject(project, engine)
   return project

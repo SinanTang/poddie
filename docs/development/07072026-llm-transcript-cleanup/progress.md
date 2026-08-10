@@ -87,3 +87,22 @@
   in project file for multi-session review. Toolbar button "Chapter
   Curation (AI)" between "Remove fillers" and "Undo".
 - Next: Phase 3 (LLM service + chapter summarization).
+
+## Session 2026-08-10 (cont.) — Phase 3 complete
+- src/main/llm.ts (new): probeLocalLlm (Ollama /api/tags, 3s timeout),
+  generic chat() helper (structured JSON, temp 0, think off, 32k ctx,
+  10-min timeout), analyzeChapters (story-arc prompt + JSON schema).
+- src/shared/types.ts: LocalLlmStatus, Chapter/Subchapter/ChapterAnalysis,
+  AppInfo.localLlm, Project.chapters, IPC channels llm:chapters +
+  project:saveChapters, PoddieApi.analyzeChapters + saveChapters.
+- src/main/project.ts: saveChapters persistence.
+- src/main/index.ts: Ollama probe at startup, llm:chapters handler (runs
+  analysis + auto-saves), project:saveChapters handler.
+- src/preload/index.ts: bridged analyzeChapters + saveChapters.
+- Tests: 155 pass (+1 saveChapters roundtrip), tsc/eslint/build clean.
+- Spike results on real 44-min zh episode:
+  - v1 (num_ctx 16384, m:ss timestamps): capped at 9:00 — model truncated
+  - v2 (num_ctx 32768, seconds timestamps, duration hint in prompt): full
+    0–2674s coverage, 3 chapters / 8 subchapters, 270s wall-clock.
+    Editorial notes somewhat generic but acceptable for v1.
+- Next: Phase 4 (chapter curation UI).
