@@ -123,4 +123,31 @@
 - app.css: .chapter-* styles (panel, header, list, group, main, sub,
   toggle kept/cut, sub-body/title/summary/note).
 - Verified: tsc, eslint, 155 tests, build all clean.
-- Next: USER CHECK on real footage.
+
+## Session 2026-08-10 (cont.) — Phase 4 user check + fixes → complete ✅
+- USER CHECK on real footage revealed 3 issues, all fixed:
+  1. Main chapter timestamps wrong (all "0:00 – 39:47"): LLM returned
+     bogus startTime/endTime for main chapters. Fix: compute from
+     min/max of subchapters both in analyzeChapters() and at render
+     time in ChapterPanel.tsx (covers cached data too).
+  2. Editorial notes too long and generic: tightened prompt from "margin
+     scribble" to "concise editorial verdict (under 12 words) for
+     keep/cut decisions, comparing against other subchapters". Renamed
+     editorialNote → editorialVerdict across types/schema/prompt/UI/tests.
+  3. Editorial note UI indistinct from summary: changed from plain italic
+     gray to amber-tinted pill with "AI note:" prefix.
+- Added "↻ Regenerate" button in chapter panel header (re-runs LLM
+  analysis without manual JSON editing).
+- Chapter panel now shows as top half with transcript visible below —
+  clicking a subchapter seeks video AND user can see transcript context.
+- Phase 4 marked complete ✅.
+
+## Session 2026-08-10 (cont.) — Phase 6 (docs & closeout)
+- README updated: added Ollama to requirements table, AI chapter curation
+  and filler removal feature bullets, "Using a different LLM" section
+  documenting PODDIE_LLM_MODEL and PODDIE_OLLAMA_URL env vars with
+  guidance on model requirements and tested models.
+- LLM model already configurable in code (llm.ts line 6:
+  `process.env.PODDIE_LLM_MODEL ?? 'qwen3:8b'`); probe hint already
+  shows the configured model name dynamically.
+- Next: update parent task_plan, mark Phase 6 complete.

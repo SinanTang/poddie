@@ -7,7 +7,7 @@
 
 <div align="center">
 
-**🔒 100% local & private** · **💸 Free transcription** · **🔇 Silence auto-trim** · **💬 Caption burn-in** · **🎬 One-click export**
+**🔒 100% local & private** · **💸 Free transcription** · **🔇 Silence auto-trim** · **📑 AI chapter curation** · **💬 Caption burn-in**
 
 <img src="docs/demo.gif" alt="Poddie demo" width="800" />
 
@@ -28,14 +28,18 @@ Built for podcasters and creators who don't have time to edit their footage.
   hunting for gaps.
 - ▶️ **Preview instantly** — the player skips your cuts live, no re-encoding, with a
   zoomable waveform for frame-precise selections.
+- ✂️ **Filler word removal** — one-click removal of filler words (currently supports EN & CN) across
+  the entire episode.
 - 💬 **Caption burn-in** — generate captions from your transcript and burn them straight
-  into the video. The kind of subtitle feature other editors put behind a subscription.
+  into the video.
+- 📑 **AI chapter curation** — a local LLM breaks your episode into story-arc chapters with editorial verdicts, so you decide what to keep or cut
+  at the chapter level before word-level editing. Runs entirely on your machine. Works with any Ollama-compatible model (default: Qwen3 8B).
 - 📤 **Export anything** — cut video (MP4), audio-only podcast (M4A/MP3), or captions as a
-  standalone SRT file. Audio sources export audio and captions — no fake video track.
+  standalone SRT file.
 
 No lock-in, no hidden database, no cloud.
 
-> **Beta / personal tool.** Poddie was built for one person's podcast workflow and runs
+> **Beta / personal tool.** Poddie was built for one person's podcast workflow and tested
 > on **macOS only**. Expect rough edges,
 > and see [Known limitations](#known-limitations) before relying on it.
 
@@ -49,12 +53,16 @@ No lock-in, no hidden database, no cloud.
 | **Node.js 22+** and npm | To run or build from source. |
 | **ffmpeg** | `brew install ffmpeg-full` recommended — the standard `ffmpeg` bottle works but lacks `libass`, so caption **burn-in** is disabled (SRT export still works). |
 | **whisper.cpp** *(optional)* | `brew install whisper-cpp` — only needed for the free local transcription engine. Without it, the OpenAI API engine still works. |
+| **Ollama** *(optional)* | [Install Ollama](https://ollama.com) and `ollama pull qwen3:8b` — only needed for AI chapter curation. Without it, transcription and filler removal still work. |
 | **OpenAI API key** *(optional)* | Only needed for the API transcription engine. Set `OPENAI_API_KEY`, or enter it once in the app. |
 
-> Poddie shells out to system `ffmpeg`/`ffprobe`/`whisper-cli` (it does not bundle them),
-> preferring the `ffmpeg-full` keg (either Homebrew prefix), then `/opt/homebrew/bin` →
-> `/usr/local/bin` → `PATH`, health-checking each. Override with `PODDIE_FFMPEG`,
-> `PODDIE_FFPROBE`, or `PODDIE_WHISPER_CLI`.
+> Poddie shells out to system `ffmpeg`/`ffprobe`/`whisper-cli` and talks to Ollama over
+> HTTP (it does not bundle any of them), preferring the `ffmpeg-full` keg (either Homebrew
+> prefix), then `/opt/homebrew/bin` → `/usr/local/bin` → `PATH`, health-checking each.
+> Override with `PODDIE_FFMPEG`, `PODDIE_FFPROBE`, `PODDIE_WHISPER_CLI`,
+> `PODDIE_OLLAMA_URL` (default `http://127.0.0.1:11434`), or `PODDIE_LLM_MODEL`
+> (default `qwen3:8b` — any Ollama-compatible model works; see
+> [Using a different LLM](#using-a-different-llm)).
 
 ---
 
@@ -81,8 +89,8 @@ npm run dist       # a universal .dmg in dist/
 ```
 
 The build is **ad-hoc signed, not notarized**. The first time you
-open it, macOS Gatekeeper will warn about an "unidentified developer" — **right-click the
-app → Open**, then confirm, and it launches normally from then on.
+open it, macOS Gatekeeper will warn about an "unidentified developer" — right-click the
+app → Open, then confirm.
 
 ---
 
@@ -90,15 +98,18 @@ app → Open**, then confirm, and it launches normally from then on.
 
 1. **Open Media…** — pick a video (`.mov`/`.mp4`/`.m4v`) or audio file (`.m4a`/`.mp3`/`.wav`/`.flac`/`.ogg`/`.opus`/`.aac`).
    iPhone HEVC is auto-converted to an H.264 preview proxy, and audio Chromium can't play
-   (e.g. ALAC) to an AAC one — your original is untouched and is what gets exported.
+   (e.g. ALAC) to an AAC one.
 2. **Choose how to transcribe** in the header — **Local model** (free, private, no key) or
    **OpenAI API** (paste your key). Local's first run downloads a ~1.6 GB Whisper model once. You'll
    see a cost/time estimate and confirm.
-3. **Edit** — click a word to seek; drag or shift-click to select, then <kbd>⌫</kbd> to cut
+3. **Curate chapters** *(optional, requires Ollama)* — click **📑 Chapters** to have a local
+   LLM break the episode into story-arc chapters with editorial verdicts. Toggle subchapters
+   to keep or cut, then **Apply cuts** to remove them all at once.
+4. **Edit** — click a word to seek; drag or shift-click to select, then <kbd>⌫</kbd> to cut
    (press again on a fully-cut selection to restore). Double-click a word to fix its text.
    Use **✂ Trim silences** to bulk-remove dead air.
-4. **Preview** — the player skips your cuts live. Zoom the waveform for precise selections.
-5. **Export** the cut video, audio-only, or captions. (Audio sources offer audio and captions only.)
+5. **Preview** — the player skips your cuts live. Zoom the waveform for precise selections.
+6. **Export** the cut video, audio-only, or captions. (Audio sources offer audio and captions only.)
 
 Keyboard: <kbd>Space</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> ±3s ·
 <kbd>⌘F</kbd> search · <kbd>⌘Z</kbd>/<kbd>⇧⌘Z</kbd> undo/redo.
@@ -144,6 +155,42 @@ npm run lint       # eslint
 - Keep business logic as pure, unit-tested functions (see `src/shared/`).
 
 Please open an issue to discuss substantial changes before a PR.
+
+---
+
+## Using a different LLM
+
+Poddie's AI features (chapter curation) use [Ollama](https://ollama.com) with **Qwen3 8B**
+by default. You can swap in any Ollama-compatible model.
+
+**From source** (env vars or `.env` file):
+
+```bash
+ollama pull llama3.1:8b
+PODDIE_LLM_MODEL=llama3.1:8b npm run dev
+```
+
+**Built app** (edit `~/Library/Application Support/poddie/config.json`):
+
+```json
+{
+  "llmModel": "llama3.1:8b",
+  "ollamaUrl": "http://127.0.0.1:11434"
+}
+```
+
+Both fields are optional — omit either to keep the default. Env vars (`PODDIE_LLM_MODEL`,
+`PODDIE_OLLAMA_URL`) always override the config file when set.
+
+**What the model needs to do well:**
+- Follow a JSON schema (Ollama's `format` parameter enforces structure, but the model must
+  produce coherent field values)
+- Handle long inputs (~10k–20k tokens for a 44-minute transcript at 32k context)
+- Generate text in the transcript's language (multilingual models work best)
+
+Tested models: `qwen3:8b` (default, good multilingual coverage). Larger models (13B+)
+may produce better editorial verdicts but need more RAM and run slower. The 4B class
+is not recommended — spike testing showed intermittent degenerate outputs.
 
 ---
 

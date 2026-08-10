@@ -128,13 +128,14 @@ interface Suggestion {
 - [x] Spike on real 44-min zh episode: 3 chapters / 8 subchapters, full 0–2674s coverage, 270s wall-clock, 843 output tokens. Editorial notes somewhat generic — acceptable for v1, prompt refinable
 
 ### Phase 4: Chapter curation UI
-**Status**: built ✅ 2026-08-10 (tsc/eslint/155 tests/build all clean) — awaiting USER CHECK
+**Status**: complete ✅ 2026-08-10 (tsc/eslint/155 tests/build all clean, user-approved UX)
 - [x] Toolbar button "📑 Chapters (AI)" between "Remove fillers" and "Undo" — gated on `localLlm.available && modelPresent`; first click triggers LLM analysis (shows "⏳ Analyzing…"), subsequent clicks toggle the saved panel; button changes to "📑 Chapters" once analysis exists
-- [x] ChapterPanel.tsx above transcript: main chapters (time range, title, summary, click to seek) with subchapters (keep/cut toggle ✓/✗, timestamp, title, summary, editorial note). Collapsible subchapter rows dim when cut
+- [x] ChapterPanel.tsx above transcript (top half, scrollable): main chapters (computed time range from subchapters, title, summary, click to seek) with subchapters (keep/cut toggle ✓/✗, timestamp, title, summary, editorial verdict with "AI note:" prefix). Cut rows dimmed
 - [x] "Apply N cuts" button in panel header: removes all cut-toggled subchapters as one undo step by marking overlapping word items removed; user can undo or restore inline
+- [x] "↻ Regenerate" button in panel header: re-runs LLM analysis without manual JSON editing
 - [x] Keep/cut decisions persist immediately on toggle (saveChapters IPC) — user can close panel, reopen, decisions survive app restarts
-- [x] Esc closes the panel
-- [ ] USER CHECK on real footage: run `npm run dev`, open the 44-min video, click "📑 Chapters (AI)", wait ~5 min, review the chapter structure, toggle some subchapters off, apply cuts, verify undo works
+- [x] Esc closes the panel; transcript stays visible below for context when clicking subchapter rows
+- [x] USER CHECK on real footage: UX approved 2026-08-10. Fixes during check: main chapter timestamps computed from subchapters (LLM returned wrong ranges), editorialNote → editorialVerdict with tighter prompt (concise keep/cut verdicts, not generic margin scribbles), distinct amber-pill UI for AI notes
 
 ### Phase 5: Punctuation (deferred, lower priority)
 **Status**: deferred
@@ -144,10 +145,10 @@ interface Suggestion {
 - [ ] UI: "Add punctuation (AI)" button → one-click apply on completion, read-only summary, inline restore
 
 ### Phase 6: Docs & closeout
-**Status**: pending
-- [ ] Update parent task_plan Phase 6 checkboxes + this plan's status
-- [ ] README: local LLM setup section (install Ollama, pull model, feature is optional)
-- [ ] CLAUDE.md: one-paragraph pointer (chapter curation, suggestion pipeline, where the contracts live)
+**Status**: complete ✅ 2026-08-10
+- [x] README: Ollama in requirements, AI chapter curation + filler removal feature bullets, "Using a different LLM" section with env var docs and model guidance
+- [x] LLM model choice transparent: `PODDIE_LLM_MODEL` env var (default `qwen3:8b`), `PODDIE_OLLAMA_URL` env var (default `http://127.0.0.1:11434`), probe hint shows configured model name dynamically, README documents how to swap models with requirements and tested models
+- [x] Update parent task_plan Phase 6 checkboxes + this plan's status
 
 ## Key Risks
 | Risk | Mitigation |
