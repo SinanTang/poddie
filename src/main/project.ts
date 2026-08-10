@@ -1,4 +1,5 @@
 import { readFile, rename, stat, writeFile } from 'node:fs/promises'
+import type { EditState } from '../shared/edit'
 import type { Project, TranscribeEngine, VideoFingerprint } from '../shared/types'
 
 /**
@@ -37,4 +38,28 @@ export async function saveProject(project: Project, engine: TranscribeEngine = '
   const tmpPath = `${path}.tmp`
   await writeFile(tmpPath, JSON.stringify(updated, null, 1), 'utf8')
   await rename(tmpPath, path)
+}
+
+/**
+ * Loads the project sitting next to `videoPath`, applies `edit`, saves it back.
+ *
+ * Re-homes `videoPath` first: the argument is where we just loaded from and is
+ * authoritative, whereas the persisted `project.videoPath` field goes stale the
+ * moment the file (or any parent folder) is moved or renamed. Without this, a
+ * reopened-from-a-new-location project keeps autosaving to its dead original
+ * path and every write fails with ENOENT.
+ */
+export async function saveEdit(
+  videoPath: string,
+  edit: EditState,
+  engine: TranscribeEngine = 'api'
+): Promise<Project> {
+  const project = await loadProject(videoPath, engine)
+  if (!project) {
+    throw new Error(`No project file to save edits into (${projectPathFor(videoPath, engine)} missing)`)
+  }
+  project.edit = edit
+  project.videoPath = videoPath
+  await saveProject(project, engine)
+  return project
 }

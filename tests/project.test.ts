@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, test } from 'vitest'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { fingerprintOf, loadProject, projectPathFor, saveProject } from '../src/main/project'
+import { fingerprintOf, loadProject, projectPathFor, saveEdit, saveProject } from '../src/main/project'
 import type { Project } from '../src/shared/types'
 
 const tmp = fileURLToPath(new URL('.tmp-project', import.meta.url))
@@ -41,6 +41,37 @@ describe('project persistence', () => {
     expect(loaded!.transcript).toEqual(project.transcript)
     expect(loaded!.updatedAt).not.toBe('')
     expect(projectPathFor(videoPath)).toBe(`${videoPath}.poddie.json`)
+  })
+
+  test('saveEdit re-homes a project whose stored videoPath went stale after a move', async () => {
+    // Simulate a moved file: the project JSON sits next to the video at the NEW
+    // path, but its internal videoPath still points at the OLD (now-gone) folder.
+    const movedVideo = join(tmp, 'moved.mov')
+    await writeFile(movedVideo, 'x')
+    const stale: Project = {
+      version: 1,
+      videoPath: '/Users/someone/gone/moved.mov', // old absolute path, folder deleted
+      fingerprint: await fingerprintOf(movedVideo),
+      transcript: {
+        language: 'english',
+        durationSec: 1,
+        model: 'whisper-1',
+        createdAt: '2026-07-18T00:00:00.000Z',
+        words: [],
+        segments: []
+      },
+      updatedAt: ''
+    }
+    // Write it directly at the new location's project path (as a real move would leave it).
+    await writeFile(projectPathFor(movedVideo), JSON.stringify(stale))
+
+    const edit = { version: 1 as const, gapMinSec: 0.3, items: [] }
+    // Without re-homing this would try to write into /Users/someone/gone → ENOENT.
+    await expect(saveEdit(movedVideo, edit)).resolves.toBeDefined()
+
+    const reloaded = await loadProject(movedVideo)
+    expect(reloaded!.videoPath).toBe(movedVideo) // healed to the real path
+    expect(reloaded!.edit).toEqual(edit)
   })
 
   test('load throws on an unsupported version', async () => {
