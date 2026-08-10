@@ -63,4 +63,27 @@
 - app.css: .review-* styles on the existing dark vocabulary.
 - Verified: tsc, eslint, 135 tests, electron-vite build all clean. Real-app
   interaction needs the native file dialog → user check.
-- Next: user check on real footage, then Phase 3 (main/llm.ts punct service).
+
+## Session 2026-08-10 — Phase 2 UX revision + completion
+- User feedback: review-per-item flow too tedious. Filler removal should be
+  one-click (like silence trim), not review-then-apply.
+- ReviewPanel.tsx: stripped to read-only summary list — timestamps + context,
+  click to seek, close. Removed: Decision type, per-row ✓/✗, Accept/Reject
+  all, Apply button.
+- App.tsx: replaced openFillerReview/onDecide/applyReview with single
+  removeFillers callback — finds + applies all fillers as one undo step,
+  then opens the read-only summary panel.
+- TranscriptView.tsx: "✂ Remove N fillers" (was "◌ Review N fillers").
+- app.css: removed .accepted/.rejected/.review-actions styles.
+- Verified: tsc, eslint, 154 tests, build all clean. User approved UX.
+- Phase 2 marked complete ✅.
+- Priority shift: user identified chapter-level curation as highest-value
+  LLM feature — editing workflow should go chapters-first, then word-level.
+  Punctuation deprioritized (now Phase 5). New Phase 3: LLM service +
+  chapter summarization. New Phase 4: chapter curation UI.
+- Chapter UX agreed: story-arc main chapters (intro/struggle/insight/
+  takeaway), subchapters as curation units, per-subchapter keep/cut toggle,
+  editorial notes as margin-scribble style (not fixed taxonomy). Persisted
+  in project file for multi-session review. Toolbar button "Chapter
+  Curation (AI)" between "Remove fillers" and "Undo".
+- Next: Phase 3 (LLM service + chapter summarization).

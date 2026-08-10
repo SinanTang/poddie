@@ -6,15 +6,16 @@ and **local LLM cleanup** (fillers + typos + minor corrections + punctuation).
 They share one suggestion/review pipeline, so they are one plan.
 
 ## Goal
-A "Clean up transcript" pass that uses a local LLM (Qwen3 via Ollama) to
-suggest — never silently apply — three kinds of transcript edits:
-1. **Filler removals** (嗯/呃/那个/就是/um/uh/you know…) → cut the audio
-2. **Text fixes** (homophone typos like 降维/将为, mis-split tokens, casing) → display/caption text only
-3. **Punctuation** (zh transcripts have ~none; captions width-break mid-word without it) → display/caption text only
+A local LLM (Qwen3 via Ollama) assists the editing workflow at two levels:
+1. **Chapter curation** (PRIORITY) — LLM summarizes the transcript into a story-arc chapter structure with editorial notes, so the user decides what to keep/cut at the chapter level BEFORE word-level editing
+2. **Filler removals** (嗯/呃/那个/就是/um/uh/you know…) → list-based, one-click, no LLM (shipped in Phase 2)
+3. **Punctuation** (deferred) — LLM adds marks at segment boundaries for caption readability
 
-All suggestions land in a review UI (accept/reject per item, bulk per
-category), and accepted ones apply through the existing `ItemChange` model:
-one undo step, autosave, timing untouched by construction.
+All suggestions apply immediately on one click (like silence trimming),
+and the user restores individual items inline or undoes the whole batch.
+A read-only summary list opens as a secondary CTA after removal.
+Applied edits go through the existing `ItemChange` model: one undo step,
+autosave, timing untouched by construction.
 
 **Language stance (user requirement, 2026-07-07): never assume the footage's
 language.** zh/en are the *likely* cases and the test data, not a design
@@ -57,28 +58,30 @@ pattern).
 | LLM scope (v1) | **Punctuation only.** LLM filler judgment deferred; fixes/merges stay manual (5.1a) | Spike: LLM filler judgment showed zero discrimination (kept 90/90 incl. a clear false-start) — adds nothing over list+review. Punct is where the LLM earns its seat. Revisit filler judgment later with better prompts/models. |
 | Batching | ~40 segments per call (Whisper segments, avg 7–9 words) → ~33 calls, ~17 min per 44-min episode | Batch 80 measured: no real speed win (generation dominates) and more comma-bias in flowing stretches; smaller batches shrink the blast radius of a failed call. Future speed lever: OLLAMA_NUM_PARALLEL concurrent batches. |
 | Progress | **Poll**, not push (`llm:poll` invoke, like export) | Hard-won rule from the export progress bug: pushed events strand across renderer HMR reloads. |
-| Review UI | Suggestion list grouped by category, accept/reject each, bulk accept per category, click → seek video to the word | zh precision risk: 那个/就是 are often REAL words. Review-before-apply is load-bearing. Seek-on-click lets the user *hear* whether it's a filler. |
+| Review UI | **One-click remove** (like silence trim) → read-only summary list opens (click → seek). Users restore individual items inline in the transcript or undo the whole batch. | User feedback: review-per-item is too tedious for mechanical changes; existing undo/restore is sufficient. |
 | Apply | Accepted suggestions → `ItemChange[]` → existing `applyEdit` path → **one undo step** | Undo/redo/autosave/waveform shading/preview all flow through for free; item count never changes so history indices stay valid. |
 | Filler baseline | List-based sequence matcher ships FIRST (pure shared code, zero deps, instant, offline) through the same suggestion+review pipeline | Closes the other open Phase 6 item; de-risks the review UI against a deterministic producer before adding LLM variance; remains the instant fallback when Ollama is absent. |
 | Language handling | No per-language code paths. Detector = generic token-sequence matcher over one flat, configurable list (shipped default covers zh+en; users extend/replace the list, ALL entries always active — mixed transcripts are normal). LLM prompt names no language. | User requirement: don't assume footage language; zh/en are likely, others must work without code changes. Language lives in data (lists, transcripts), never in logic. |
+| Chapter structure | **Story-arc main chapters** (intro/struggle/insight/takeaway or whatever fits) with **subchapters** as the curation unit. ~8–15 subchapters for a 44-min episode. Editorial notes are LLM-generated margin scribbles, not a fixed taxonomy. | Matches how podcasts are actually structured as stories. Main chapters give orientation; subchapters are the right granularity for keep/cut decisions. |
+| Chapter persistence | Stored in project file alongside edit state. First click runs LLM; subsequent clicks load saved results. | Chapter curation is multi-session — user listens, decides, comes back. Must survive app restarts. |
 | Availability | Probe at startup → `AppInfo.localLlm: {available, hint, modelPresent}` | Same gate shape as `LocalWhisperStatus`. Server down / model missing → actionable hint (`ollama serve`, `ollama pull qwen3:8b`), button disabled, list-based fillers still work. |
 
 ## Data Model (shared/cleanup.ts — all pure, all unit-tested)
 ```ts
 // The app enumerates; the LLM (or the list) only decides. Positions never come from the model.
+// Suggestions are ephemeral — ALL are applied immediately on one click; no per-item accept/reject.
 interface Suggestion {
   id: number
   kind: 'punct' | 'filler'
   source: 'list' | 'llm'
-  status: 'pending' | 'accepted' | 'rejected'
   // punct: append `add` to word item `index` (the segment's last word)
   // filler: mark word items `index..endIndex` removed
   index: number
   endIndex?: number
   add?: string          // one of the punct-mark enum
-  preview: string       // context text for the review row
+  preview: string       // context text for the read-only summary row
 }
-// findFillerCandidates(items, list): longest-match-first token-sequence scan → filler Suggestions.
+// findFillerSuggestions(items, list): longest-match-first token-sequence scan → filler Suggestions.
 // segmentAnchors(items, segments): each segment → its last word item index (by time, deterministic;
 //   segments with no kept word are skipped). Feeds both the punct prompt and the apply step.
 // suggestionChanges(items, accepted): → ItemChange[] via textEditChanges (punct appends to text)
@@ -106,42 +109,55 @@ interface Suggestion {
 - Staleness design: suggestions carry the text they saw (anchorText / span text); apply re-checks against current items and silently skips mismatches — callers can diff counts for the UI
 
 ### Phase 2: Review UI + filler-list path (ships standalone)
-**Status**: built ✅ 2026-07-09 (tsc/eslint/135 tests/build all clean) — awaiting USER CHECK
-- [x] Toolbar "◌ Review N fillers" (live count, disabled at 0) → ReviewPanel.tsx: found/to-apply counts, per-row ✓/✗ (re-deciding reverts to pending), Accept/Reject all, row click seeks the video, Esc closes. Panel docks above the transcript in the same pane; suggestions snapshot on open (ids stay stable), apply re-validates and skips stale
-- [x] Apply accepted → suggestionChanges → ONE applyEdit (one undo step) → autosave + waveform shading + kept/cut summary all flow through the existing items pipeline
+**Status**: complete ✅ 2026-08-10 (tsc/eslint/154 tests/build all clean, user-approved UX)
+- [x] Toolbar "✂ Remove N fillers" — one-click removal (like silence trimming), disabled at 0
+- [x] After removal: read-only ReviewPanel.tsx opens as summary — timestamps + context, click to seek, close with Esc/✕. No per-item accept/reject, no "Apply" button
+- [x] Users restore individual filler removals inline in the transcript (same as restoring any other cut) or undo the whole batch with ⌘Z
+- [x] Apply → suggestionChanges → ONE applyEdit (one undo step) → autosave + waveform shading + kept/cut summary all flow through the existing items pipeline
 - [x] Filler cuts render through the existing `.cut` strikethrough — no new rendering path
-- [ ] USER CHECK on real footage: precision of the zh list, review ergonomics (358 candidates on the real episode — is the row flow workable?)
+- [x] USER CHECK: UX approved 2026-08-10. Original review-per-item flow rejected as too tedious; one-click-remove + inline-restore adopted
 
-### Phase 3: LLM service (main/llm.ts)
-**Status**: pending
+### Phase 3: LLM service (main/llm.ts) + Chapter curation
+**Status**: pending — **PRIORITY: chapter curation first, punctuation deferred**
 - [ ] Probe: server version + model presence → `AppInfo.localLlm` (available/hint/modelPresent); injectable fetch (whisper.ts pattern), never assume server is up
-- [ ] `punctBatch(numberedSegs)`: chat call w/ the spike6 prompt + json-schema format (marks array, enum'd `add`), temperature 0, think off, 1 retry on network/5xx, per-batch timeout
-- [ ] Orchestrator: sequential ~40-seg batches (one model instance; OLLAMA_NUM_PARALLEL is a later speed lever), progress fraction + suggestions accumulated per batch, AbortController cancel, failed batch → logged + skipped, never aborts the run
-- [ ] IPC: `llm:status`, `llm:start`, `llm:poll` (fraction + new suggestions since last poll), `llm:cancel` — through `handleIpc` wrapper for logging
+- [ ] IPC: `llm:status` + shared chat call helper (reused by chapters and later by punct)
+- [ ] Chapter summarization: send full transcript text → LLM returns story-arc chapters with subchapters, one-line summaries, and editorial notes per subchapter
+- [ ] Chapter data model in shared/cleanup.ts (or shared/chapters.ts): Chapter { title, startTime, endTime, summary, editorialNote, subchapters: Subchapter[] }, Subchapter { title, startTime, endTime, summary, editorialNote, kept: boolean }
+- [ ] Persistence: chapter results stored in project file alongside edit state; first LLM call generates, subsequent opens just load saved data
 
-### Phase 4: LLM path in the UI
+### Phase 4: Chapter curation UI
 **Status**: pending
-- [ ] "Add punctuation (AI)" button (gated on `localLlm.available`; disabled state shows the hint) → runs orchestrator → punct suggestions stream into the SAME review panel per batch (review can start while later batches run; bulk-accept per batch is the expected flow given ~1300 suggestions)
-- [ ] Review ergonomics at punct scale: group by batch/time-range, default-accepted with easy unaccept (placement is ~80–85% right — opt-OUT review reads better than opt-in at this volume), click → seek
-- [ ] USER CHECK on the real 44-min episode: end-to-end run, review, apply, export; verify punctuation actually fixes the caption width-break problem (654-cue file is the benchmark)
+- [ ] Toolbar button "Chapter Curation (AI)" between "Remove fillers" and "Undo" — gated on `localLlm.available`; first click triggers LLM summarization (progress indicator), subsequent clicks reopen the saved panel
+- [ ] Chapter panel above transcript: story-arc main chapters (intro / struggle / insight / takeaway or whatever fits the content), each with subchapters. Per-subchapter: time range, summary, editorial note, keep/cut toggle. Click row → seek video
+- [ ] Editorial notes: LLM-generated margin-scribble style, specific to the content (e.g. "Great origin story", "Repeats the point from 12:00", "Fun tangent, not essential") — NOT fixed taxonomy labels
+- [ ] "Apply cuts" action: removes all cut-toggled subchapters as one undo step via existing toggleRangeChanges; user can undo or restore inline
+- [ ] Keep/cut decisions persisted in project file so the user can close and revisit
+- [ ] USER CHECK on real footage
 
-### Phase 5: Docs & closeout
+### Phase 5: Punctuation (deferred, lower priority)
+**Status**: deferred
+- [ ] Punct batch caller: `punctBatch(numberedSegs)` with spike6 prompt + json-schema format, temperature 0, think off, 1 retry on network/5xx
+- [ ] Orchestrator: sequential ~40-seg batches, progress fraction, AbortController cancel, failed batch → logged + skipped
+- [ ] IPC: `llm:punct-start`, `llm:punct-poll`, `llm:punct-cancel`
+- [ ] UI: "Add punctuation (AI)" button → one-click apply on completion, read-only summary, inline restore
+
+### Phase 6: Docs & closeout
 **Status**: pending
-- [ ] Update parent task_plan Phase 6 checkboxes + this plan's status; findings.md gets measured numbers (op validity %, precision, wall-clock)
+- [ ] Update parent task_plan Phase 6 checkboxes + this plan's status
 - [ ] README: local LLM setup section (install Ollama, pull model, feature is optional)
-- [ ] CLAUDE.md: one-paragraph pointer (suggestion pipeline, the echo-validation invariant, where the op contract lives)
+- [ ] CLAUDE.md: one-paragraph pointer (chapter curation, suggestion pipeline, where the contracts live)
 
 ## Key Risks
 | Risk | Mitigation |
 |------|------------|
-| zh filler false positives (那个/就是 as real words — measured: they're 74% of all 358 candidates) | Review UI is the product, not a safety net; list matcher requires the sequence to be a standalone token run. (LLM pre-filtering measured useless in spike — kept 90/90.) |
-| Occasional whole-batch degeneracy (4b stamped 。×80; 8b comma-heavy on flowing stretches) | 8b only; ~40-seg batches limit blast radius; review UI groups by batch so a bad batch is one bulk-reject; mark-distribution sanity check per batch (all-same-mark on ≥40 segs → flag in UI) is cheap if needed |
-| Punct placement wrong ~15–20% of the time | Marks land only at segment ends (mid-word impossible); review is opt-out at this volume; wrong mark = one click or an inline text edit later |
-| Ollama not installed / server down / model missing | Probe + per-state hint; list-based fillers work regardless; no hard dependency for the rest of the app |
-| Latency (~33 sequential batches ≈ 17 min) | Progress + cancel from day one (poll pattern); OLLAMA_NUM_PARALLEL concurrency is the untapped lever if 17 min annoys |
-| Suggestions go stale (user edits while reviewing) | Punct answers re-checked against the segment's last-word text at apply time — changed text → suggestion dropped with a visible count; filler ranges re-checked the same way |
-| Model RAM pressure (8B ≈ 5–6 GB) while ffmpeg/whisper run | Cleanup is a foreground, standalone action — UI disables the button while an export or transcription is active |
+| Chapter boundaries don't match user's mental model | Chapters are suggestions, not constraints — user toggles keep/cut per subchapter and can restore inline. The story-arc prompt (intro/struggle/insight/takeaway) anchors structure but the LLM adapts to the actual content |
+| Editorial notes feel generic / AI-slop | Prompt asks for margin-scribble style specific to content, not fixed taxonomy. Spike on real episode to validate tone before shipping |
+| Long transcript exceeds context window (44 min ≈ 9k words) | qwen3:8b context is 32k tokens — 9k words fits comfortably. For longer episodes, chunk into halves with overlap and merge chapter boundaries |
+| zh filler false positives (那个/就是 as real words) | List matcher requires standalone token runs; user restores inline or undoes the batch |
+| Ollama not installed / server down / model missing | Probe + per-state hint; list-based fillers work regardless; chapter curation button disabled with actionable hint |
+| Model RAM pressure (8B ≈ 5–6 GB) while ffmpeg/whisper run | LLM features are foreground standalone actions — button disabled while export or transcription is active |
 
 ## Errors Encountered
 | Error | Attempt | Resolution |
 |-------|---------|------------|
+| `npm run dev` → "Error: Electron uninstall" (user, 2026-07-09). Cause: the checkout had no node_modules; my sandboxed `npm install` (2026-07-08) silently failed Electron's postinstall (the ~100 MB binary download from GitHub) → package present but `path.txt`/`dist/` missing. Tests/tsc/`electron-vite build` all pass in that state — none of them exec the Electron binary, so the breakage only shows on `dev` | 1 | `node node_modules/electron/install.js` (unsandboxed) → `npx electron --version` = v43.0.0. Lesson: after any npm install in a sandboxed shell, verify `node_modules/electron/path.txt` exists — "deps installed" ≠ "binary present" |
