@@ -96,7 +96,7 @@ export interface Subchapter {
   startTime: number
   endTime: number
   summary: string
-  editorialNote: string
+  editorialVerdict: string
   kept: boolean
 }
 

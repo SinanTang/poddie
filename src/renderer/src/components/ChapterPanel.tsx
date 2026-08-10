@@ -7,6 +7,8 @@ interface ChapterPanelProps {
   onToggleKept: (chapterIdx: number, subIdx: number) => void
   onSeek: (timeSec: number) => void
   onApply: () => void
+  onRegenerate: () => void
+  regenerating: boolean
   onClose: () => void
 }
 
@@ -38,7 +40,7 @@ function SubchapterRow({
       <span className="chapter-sub-body">
         <span className="chapter-sub-title">{sub.title}</span>
         <span className="chapter-sub-summary">{sub.summary}</span>
-        <span className="chapter-sub-note">{sub.editorialNote}</span>
+        <span className="chapter-sub-note">AI note: {sub.editorialVerdict}</span>
       </span>
     </div>
   )
@@ -49,6 +51,8 @@ export function ChapterPanel({
   onToggleKept,
   onSeek,
   onApply,
+  onRegenerate,
+  regenerating,
   onClose
 }: ChapterPanelProps): React.JSX.Element {
   const cuts = cutCount(chapters.chapters)
@@ -72,6 +76,14 @@ export function ChapterPanel({
           {cuts > 0 && ` · ${cuts} marked for removal`}
         </span>
         <span className="spacer" />
+        <button
+          className="ghost small"
+          onClick={onRegenerate}
+          disabled={regenerating}
+          title="Re-run AI chapter analysis"
+        >
+          {regenerating ? '⏳ Regenerating…' : '↻ Regenerate'}
+        </button>
         {cuts > 0 && (
           <button className="small" onClick={onApply} title="Remove all cut-marked sections as one undo step">
             Apply {cuts} cuts
@@ -82,9 +94,9 @@ export function ChapterPanel({
       <div className="chapter-list">
         {chapters.chapters.map((ch, ci) => (
           <div key={ci} className="chapter-group">
-            <div className="chapter-main" onClick={() => seekTo(ch.startTime)}>
+            <div className="chapter-main" onClick={() => seekTo(ch.subchapters[0]?.startTime ?? ch.startTime)}>
               <span className="chapter-main-time">
-                {fmtDuration(ch.startTime)} – {fmtDuration(ch.endTime)}
+                {fmtDuration(Math.min(...ch.subchapters.map(s => s.startTime)))} – {fmtDuration(Math.max(...ch.subchapters.map(s => s.endTime)))}
               </span>
               <span className="chapter-main-title">{ch.title}</span>
               <span className="chapter-main-summary">{ch.summary}</span>

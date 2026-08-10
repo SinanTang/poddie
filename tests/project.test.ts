@@ -121,7 +121,7 @@ describe('project persistence', () => {
           startTime: 0,
           endTime: 30,
           summary: 'The opening hook',
-          editorialNote: 'Strong start',
+          editorialVerdict: 'Strong start',
           kept: true
         }]
       }],

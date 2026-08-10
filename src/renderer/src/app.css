@@ -655,7 +655,7 @@ progress {
   display: flex;
   flex-direction: column;
   max-height: 50%;
-  border-bottom: 1px solid #2e3138;
+  border-bottom: 1px solid var(--border);
   background: #1e2025;
   flex-shrink: 0;
 }
@@ -788,9 +788,14 @@ progress {
 }
 
 .chapter-sub-note {
-  color: #6b7280;
+  display: inline-block;
+  margin-top: 2px;
+  padding: 1px 6px;
   font-size: 11px;
   font-style: italic;
+  color: var(--warning);
+  background: rgba(245, 158, 11, 0.08);
+  border-radius: var(--radius-sm);
 }
 
 .export-block {

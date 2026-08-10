@@ -426,11 +426,7 @@ export default function App(): React.JSX.Element {
     [videoEl, items]
   )
 
-  const onChapterButton = useCallback(async () => {
-    if (chapters) {
-      setChapterPanelOpen((o) => !o)
-      return
-    }
+  const runChapterAnalysis = useCallback(async () => {
     if (!media || analyzingChapters) return
     setAnalyzingChapters(true)
     try {
@@ -442,7 +438,15 @@ export default function App(): React.JSX.Element {
     } finally {
       setAnalyzingChapters(false)
     }
-  }, [chapters, media, engine, analyzingChapters])
+  }, [media, engine, analyzingChapters])
+
+  const onChapterButton = useCallback(async () => {
+    if (chapters) {
+      setChapterPanelOpen((o) => !o)
+      return
+    }
+    await runChapterAnalysis()
+  }, [chapters, runChapterAnalysis])
 
   const onToggleChapterKept = useCallback((chapterIdx: number, subIdx: number) => {
     setChapters((prev) => {
@@ -776,6 +780,8 @@ export default function App(): React.JSX.Element {
                   onToggleKept={onToggleChapterKept}
                   onSeek={seekToTime}
                   onApply={applyChapterCuts}
+                  onRegenerate={runChapterAnalysis}
+                  regenerating={analyzingChapters}
                   onClose={() => setChapterPanelOpen(false)}
                 />
               )}

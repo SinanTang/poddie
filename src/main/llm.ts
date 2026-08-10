@@ -61,12 +61,12 @@ function chapterSystemPrompt(durationSec: number): string {
 
 The full episode is ${Math.round(durationSec)} seconds long. Your chapters MUST span the entire episode from 0 to ${Math.round(durationSec)} seconds — do not stop early.
 
-Break the episode into 3–6 main chapters that follow the natural storyline (e.g. "How it started", "The turning point", "What I learned"). Each main chapter contains 2–5 subchapters — the concrete topics discussed within that arc.
+Break the episode into 3-6 main chapters that follow the natural storyline (e.g. "How it started", "The turning point", "What I learned"). Each main chapter contains 2-5 subchapters — the concrete topics discussed within that arc.
 
 For every subchapter, write:
 - "title": a short, natural title (how a human would name it in show notes)
 - "summary": one sentence saying what's discussed
-- "editorialNote": a candid margin note — what a human editor would scribble ("This is gold", "Repeats the point from earlier", "Interesting tangent but could be cut for time", "Strong opening hook", "Audience won't care without context from chapter 2"). Be specific to the content, not generic.
+- "editorialVerdict": concise editorial verdict (under 12 words) that helps the editor decide whether to KEEP or CUT this subchapter. Compare against the other subchapters — what makes this one essential, redundant, or weak? Focus on unique value, audience impact, or structural role. Examples: "Core origin story — can't cut without losing the thread", "Same validation point as ch1 sub3, keep the stronger one", "Interesting but tangential — safe to cut for time", "The emotional climax, strongest moment in the episode", "Generic advice, nothing the audience hasn't heard".
 - "startTime" / "endTime": timestamps in seconds, matching the transcript timestamps
 
 Return JSON matching the schema. Use the transcript's language for titles and summaries. Do not translate or rewrite the transcript.`
@@ -93,9 +93,9 @@ const CHAPTER_SCHEMA = {
                 startTime: { type: 'number' },
                 endTime: { type: 'number' },
                 summary: { type: 'string' },
-                editorialNote: { type: 'string' }
+                editorialVerdict: { type: 'string' }
               },
-              required: ['title', 'startTime', 'endTime', 'summary', 'editorialNote']
+              required: ['title', 'startTime', 'endTime', 'summary', 'editorialVerdict']
             }
           }
         },
@@ -141,6 +141,10 @@ export async function analyzeChapters(
   for (const ch of parsed.chapters) {
     for (const sub of ch.subchapters) {
       sub.kept = true
+    }
+    if (ch.subchapters.length > 0) {
+      ch.startTime = Math.min(...ch.subchapters.map((s) => s.startTime))
+      ch.endTime = Math.max(...ch.subchapters.map((s) => s.endTime))
     }
   }
 
