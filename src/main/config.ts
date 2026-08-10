@@ -27,6 +27,8 @@ export function loadEnvFile(path: string): void {
 
 interface AppConfig {
   openaiApiKey?: string
+  llmModel?: string
+  ollamaUrl?: string
 }
 
 function configPath(configDir: string): string {
@@ -78,4 +80,21 @@ export async function clearApiKey(configDir: string): Promise<ApiKeyStatus> {
   await mkdir(configDir, { recursive: true })
   await writeFile(configPath(configDir), JSON.stringify(config, null, 2), { mode: 0o600 })
   return getApiKeyStatus(configDir)
+}
+
+export interface LlmConfig {
+  model: string
+  ollamaUrl: string
+}
+
+const LLM_MODEL_DEFAULT = 'qwen3:8b'
+const OLLAMA_URL_DEFAULT = 'http://127.0.0.1:11434'
+
+/** Env vars win over config.json, which wins over defaults. */
+export async function getLlmConfig(configDir: string): Promise<LlmConfig> {
+  const config = await readConfig(configDir)
+  return {
+    model: process.env.PODDIE_LLM_MODEL ?? config.llmModel ?? LLM_MODEL_DEFAULT,
+    ollamaUrl: process.env.PODDIE_OLLAMA_URL ?? config.ollamaUrl ?? OLLAMA_URL_DEFAULT
+  }
 }

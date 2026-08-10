@@ -8,7 +8,7 @@ import { hasFilter } from './ffmpeg'
 import type { TimeRange } from '../shared/edit'
 import { computePeaks, ensurePreviewProxy, extractAudio, ffprobeJson, probeMedia } from './media'
 import { startMediaServer, type MediaServer } from './media-server'
-import { clearApiKey, getApiKey, getApiKeyStatus, loadEnvFile, setApiKey } from './config'
+import { clearApiKey, getApiKey, getApiKeyStatus, getLlmConfig, loadEnvFile, setApiKey } from './config'
 import { loadProject, saveChapters, saveEdit } from './project'
 import type { EditState } from '../shared/edit'
 import { transcribeVideo } from './transcribe'
@@ -83,9 +83,10 @@ app.whenReady().then(async () => {
   if (!canBurnCaptions) log('info', 'captions', 'ffmpeg lacks the subtitles filter (libass) — burn-in disabled')
   const localWhisper = await probeLocalWhisper(modelsDir)
   if (!localWhisper.available) log('info', 'whisper-local', `local transcription disabled: ${localWhisper.hint}`)
-  const localLlm = await probeLocalLlm()
+  const llmCfg = await getLlmConfig(app.getPath('userData'))
+  const localLlm = await probeLocalLlm(llmCfg)
   if (!localLlm.available) log('info', 'llm', `local LLM disabled: ${localLlm.hint}`)
-  else if (!localLlm.modelPresent) log('info', 'llm', `Ollama available but model missing: ${localLlm.hint}`)
+  else if (!localLlm.modelPresent) log('info', 'llm', `Ollama available but model ${llmCfg.model} missing: ${localLlm.hint}`)
 
   // engine comes over IPC — normalize instead of trusting the wire; anything
   // unrecognized falls back to the app default (local: free, fully offline)
@@ -97,7 +98,7 @@ app.whenReady().then(async () => {
     canBurnCaptions,
     // modelPresent flips after the first in-app download — re-probe per call
     localWhisper: localWhisper.available ? await probeLocalWhisper(modelsDir) : localWhisper,
-    localLlm: await probeLocalLlm()
+    localLlm: await probeLocalLlm(llmCfg)
   }))
 
   const VIDEO_EXTENSIONS = ['mov', 'mp4', 'm4v']
@@ -166,7 +167,7 @@ app.whenReady().then(async () => {
     const engine = asEngine(engineArg)
     const project = await loadProject(videoPath, engine)
     if (!project?.transcript) throw new Error('No transcript — transcribe first')
-    const result = await analyzeChapters(project.transcript.words, project.transcript.segments, project.transcript.durationSec)
+    const result = await analyzeChapters(llmCfg, project.transcript.words, project.transcript.segments, project.transcript.durationSec)
     await saveChapters(videoPath, result, engine)
     return result
   })

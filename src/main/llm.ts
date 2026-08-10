@@ -1,22 +1,20 @@
 import { joinTokens } from '../shared/cjk'
+import type { LlmConfig } from './config'
 import { log } from './logger'
 import type { ChapterAnalysis, LocalLlmStatus, TranscriptSegment, TranscriptWord } from '../shared/types'
 
-const OLLAMA_BASE = process.env.PODDIE_OLLAMA_URL ?? 'http://127.0.0.1:11434'
-const MODEL = process.env.PODDIE_LLM_MODEL ?? 'qwen3:8b'
-
-export async function probeLocalLlm(): Promise<LocalLlmStatus> {
+export async function probeLocalLlm(cfg: LlmConfig): Promise<LocalLlmStatus> {
   try {
-    const res = await fetch(`${OLLAMA_BASE}/api/tags`, { signal: AbortSignal.timeout(3000) })
+    const res = await fetch(`${cfg.ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(3000) })
     if (!res.ok) {
       return { available: false, hint: `Ollama server responded with HTTP ${res.status} — is it running?`, modelPresent: false }
     }
     const data = (await res.json()) as { models?: { name: string }[] }
     const models = data.models ?? []
-    const present = models.some((m) => m.name === MODEL || m.name.startsWith(`${MODEL}:`))
+    const present = models.some((m) => m.name === cfg.model || m.name.startsWith(`${cfg.model}:`))
     return {
       available: true,
-      hint: present ? null : `Run "ollama pull ${MODEL}" to download the model`,
+      hint: present ? null : `Run "ollama pull ${cfg.model}" to download the model`,
       modelPresent: present
     }
   } catch {
@@ -29,14 +27,14 @@ interface ChatResult {
   wallSec: number
 }
 
-async function chat(system: string, user: string, schema: object): Promise<ChatResult> {
+async function chat(cfg: LlmConfig, system: string, user: string, schema: object): Promise<ChatResult> {
   const t0 = Date.now()
-  const res = await fetch(`${OLLAMA_BASE}/api/chat`, {
+  const res = await fetch(`${cfg.ollamaUrl}/api/chat`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     signal: AbortSignal.timeout(600_000),
     body: JSON.stringify({
-      model: MODEL,
+      model: cfg.model,
       stream: false,
       think: false,
       format: schema,
@@ -123,14 +121,15 @@ function buildTranscriptText(words: TranscriptWord[], segments: TranscriptSegmen
 }
 
 export async function analyzeChapters(
+  cfg: LlmConfig,
   words: TranscriptWord[],
   segments: TranscriptSegment[],
   durationSec: number
 ): Promise<ChapterAnalysis> {
   const transcript = buildTranscriptText(words, segments)
-  log('info', 'llm', `chapter analysis: ${words.length} words, ${segments.length} segments, ${transcript.length} chars, ${Math.round(durationSec)}s`)
+  log('info', 'llm', `chapter analysis (${cfg.model}): ${words.length} words, ${segments.length} segments, ${transcript.length} chars, ${Math.round(durationSec)}s`)
 
-  const { content, wallSec } = await chat(chapterSystemPrompt(durationSec), transcript, CHAPTER_SCHEMA)
+  const { content, wallSec } = await chat(cfg, chapterSystemPrompt(durationSec), transcript, CHAPTER_SCHEMA)
   log('info', 'llm', `chapter analysis complete in ${wallSec.toFixed(1)}s`)
 
   const parsed = JSON.parse(content) as { chapters: ChapterAnalysis['chapters'] }
@@ -148,5 +147,5 @@ export async function analyzeChapters(
     }
   }
 
-  return { chapters: parsed.chapters, model: MODEL, createdAt: new Date().toISOString() }
+  return { chapters: parsed.chapters, model: cfg.model, createdAt: new Date().toISOString() }
 }
