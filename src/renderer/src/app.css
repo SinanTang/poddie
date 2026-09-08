@@ -306,6 +306,7 @@ textarea {
 }
 
 .video-pane {
+  /* width is set inline by the splitter; this is the pre-hydration fallback */
   width: 330px;
   flex-shrink: 0;
   padding: var(--space-3);
@@ -1132,4 +1133,33 @@ button.big {
 }
 .caption-toggle:disabled {
   opacity: 0.4;
+}
+
+/* ---------- resizable panes ---------- */
+
+/* A thin bar with a hit area wider than it looks: negative margins let it sit
+   on top of the 1px border it is resizing, so the cursor changes exactly where
+   the seam appears rather than a few pixels off it. */
+.splitter {
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
+  background: transparent;
+  transition: background 120ms ease;
+}
+.splitter:hover,
+.splitter:active,
+.splitter:focus-visible {
+  background: var(--accent);
+  outline: none;
+}
+.splitter.vertical {
+  width: 5px;
+  margin: 0 -3px;
+  cursor: col-resize;
+}
+.splitter.horizontal {
+  height: 5px;
+  margin: -3px 0;
+  cursor: row-resize;
 }

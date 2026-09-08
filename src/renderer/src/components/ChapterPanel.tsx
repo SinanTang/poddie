@@ -21,6 +21,9 @@ interface ChapterPanelProps {
   canBurnCaptions: boolean
   hasVideo: boolean
   onBurnInChange: (value: boolean) => void
+  /** Set by App while the panel is being resized. */
+  style?: React.CSSProperties
+  panelRef?: React.Ref<HTMLDivElement>
 }
 
 function cutCount(chapters: Chapter[]): number {
@@ -115,7 +118,9 @@ export function ChapterPanel({
   burnIn,
   canBurnCaptions,
   hasVideo,
-  onBurnInChange
+  onBurnInChange,
+  style,
+  panelRef
 }: ChapterPanelProps): React.JSX.Element {
   const cuts = cutCount(chapters.chapters)
 
@@ -130,7 +135,7 @@ export function ChapterPanel({
   const seekTo = useCallback((sec: number) => onSeek(sec + 0.001), [onSeek])
 
   return (
-    <div className="chapter-panel">
+    <div className="chapter-panel" ref={panelRef} style={style}>
       <div className="chapter-header">
         <strong>Chapters</strong>
         <span className="chapter-count">

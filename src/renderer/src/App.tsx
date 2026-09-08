@@ -26,6 +26,7 @@ import { FeedbackDialog } from './components/FeedbackDialog'
 import { SearchBar } from './components/SearchBar'
 import { ReviewPanel } from './components/ReviewPanel'
 import { ChapterPanel } from './components/ChapterPanel'
+import { Splitter } from './components/Splitter'
 import { TranscriptView } from './components/TranscriptView'
 import { Waveform } from './components/Waveform'
 import type {
@@ -169,6 +170,37 @@ function SettingsMenu({
 }
 
 /** The one progress pattern for every long-running job (proxy, transcribe, export). */
+/**
+ * Pane size limits. Every drag is clamped against these, so a pane can be made
+ * small but never collapsed to nothing — the user can always drag it back.
+ */
+const VIDEO_PANE_DEFAULT_PX = 330
+const VIDEO_PANE_MIN_PX = 260
+const TRANSCRIPT_MIN_WIDTH_PX = 360
+const CHAPTERS_MIN_HEIGHT_PX = 120
+const TRANSCRIPT_MIN_HEIGHT_PX = 180
+
+const clamp = (value: number, lo: number, hi: number): number => Math.min(Math.max(value, lo), hi)
+
+/** Pane sizes are a per-machine preference, so they live in localStorage. */
+function storedSize(key: string): number | null {
+  try {
+    const value = Number(window.localStorage.getItem(key))
+    return Number.isFinite(value) && value > 0 ? value : null
+  } catch {
+    return null
+  }
+}
+
+function storeSize(key: string, value: number | null): void {
+  try {
+    if (value === null) window.localStorage.removeItem(key)
+    else window.localStorage.setItem(key, String(value))
+  } catch {
+    // a blocked storage backend must not break resizing
+  }
+}
+
 function ProgressLine({
   label,
   fraction,
@@ -331,6 +363,54 @@ export default function App(): React.JSX.Element {
   )
 
   const [chapterPanelOpen, setChapterPanelOpen] = useState(false)
+
+  const workspaceRef = useRef<HTMLDivElement | null>(null)
+  const transcriptPaneRef = useRef<HTMLDivElement | null>(null)
+  const chapterPanelRef = useRef<HTMLDivElement | null>(null)
+  const [videoPaneWidth, setVideoPaneWidth] = useState(
+    () => storedSize('poddie.videoPaneWidth') ?? VIDEO_PANE_DEFAULT_PX
+  )
+  /** null = untouched, so the stylesheet's default height still applies. */
+  const [chaptersHeight, setChaptersHeight] = useState<number | null>(() => storedSize('poddie.chaptersHeight'))
+  const dragBase = useRef(0)
+
+  const startVideoDrag = useCallback(() => {
+    dragBase.current = videoPaneWidth
+  }, [videoPaneWidth])
+
+  const dragVideo = useCallback((delta: number) => {
+    const workspace = workspaceRef.current
+    if (!workspace) return
+    // the pane sits on the right, so dragging the edge right shrinks it
+    const max = Math.max(VIDEO_PANE_MIN_PX, workspace.clientWidth - TRANSCRIPT_MIN_WIDTH_PX)
+    const next = clamp(dragBase.current - delta, VIDEO_PANE_MIN_PX, max)
+    setVideoPaneWidth(next)
+    storeSize('poddie.videoPaneWidth', next)
+  }, [])
+
+  const resetVideoPane = useCallback(() => {
+    setVideoPaneWidth(VIDEO_PANE_DEFAULT_PX)
+    storeSize('poddie.videoPaneWidth', null)
+  }, [])
+
+  const startChaptersDrag = useCallback(() => {
+    // untouched panels have no stored height yet — measure what CSS gave them
+    dragBase.current = chaptersHeight ?? chapterPanelRef.current?.offsetHeight ?? CHAPTERS_MIN_HEIGHT_PX
+  }, [chaptersHeight])
+
+  const dragChapters = useCallback((delta: number) => {
+    const pane = transcriptPaneRef.current
+    if (!pane) return
+    const max = Math.max(CHAPTERS_MIN_HEIGHT_PX, pane.clientHeight - TRANSCRIPT_MIN_HEIGHT_PX)
+    const next = clamp(dragBase.current + delta, CHAPTERS_MIN_HEIGHT_PX, max)
+    setChaptersHeight(next)
+    storeSize('poddie.chaptersHeight', next)
+  }, [])
+
+  const resetChaptersHeight = useCallback(() => {
+    setChaptersHeight(null)
+    storeSize('poddie.chaptersHeight', null)
+  }, [])
   const [analyzingChapters, setAnalyzingChapters] = useState(false)
 
   const applyEdit = useCallback((changes: ItemChange[]) => {
@@ -875,8 +955,8 @@ export default function App(): React.JSX.Element {
 
       {media ? (
         <>
-          <div className="workspace">
-            <div className="transcript-pane">
+          <div className="workspace" ref={workspaceRef}>
+            <div className="transcript-pane" ref={transcriptPaneRef}>
               {chapterPanelOpen && chapters && (
                 <ChapterPanel
                   chapters={chapters}
@@ -894,6 +974,17 @@ export default function App(): React.JSX.Element {
                   canBurnCaptions={appInfo?.canBurnCaptions ?? false}
                   hasVideo={media.hasVideo}
                   onBurnInChange={setBurnIn}
+                  panelRef={chapterPanelRef}
+                  style={chaptersHeight === null ? undefined : { height: chaptersHeight, maxHeight: 'none' }}
+                />
+              )}
+              {chapterPanelOpen && chapters && (
+                <Splitter
+                  orientation="horizontal"
+                  onDragStart={startChaptersDrag}
+                  onDrag={dragChapters}
+                  onReset={resetChaptersHeight}
+                  label="Resize chapters panel"
                 />
               )}
               {review && items && (
@@ -965,7 +1056,15 @@ export default function App(): React.JSX.Element {
               )}
             </div>
 
-            <aside className="video-pane">
+            <Splitter
+              orientation="vertical"
+              onDragStart={startVideoDrag}
+              onDrag={dragVideo}
+              onReset={resetVideoPane}
+              label="Resize video panel"
+            />
+
+            <aside className="video-pane" style={{ width: videoPaneWidth }}>
               {playerSrc ? (
                 media.hasVideo ? (
                   <video ref={setVideoEl} key={playerSrc} className="player" controls src={playerSrc} />
