@@ -99,6 +99,30 @@ export function keptRanges(items: EditItem[], durationSec: number, gapMinSec = G
 }
 
 /**
+ * The parts of `ranges` inside the window [start, end], clamped to it.
+ *
+ * A chapter clip is not a new kind of cut: it is the edit the user already
+ * made, narrowed to a time window. Callers pass keptRanges() in, so every
+ * deletion the user made is preserved by construction and there is no second
+ * place that decides what "kept" means. Slivers too short to play are dropped,
+ * exactly as keptRanges() drops them.
+ */
+export function rangesWithin(ranges: TimeRange[], start: number, end: number): TimeRange[] {
+  const out: TimeRange[] = []
+  for (const r of ranges) {
+    const s = Math.max(r.start, start)
+    const e = Math.min(r.end, end)
+    if (e - s >= MIN_KEPT_SLIVER_SEC) out.push({ start: s, end: e })
+  }
+  return out
+}
+
+/** Total playable seconds in a range list — the duration of an export. */
+export function rangesDuration(ranges: TimeRange[]): number {
+  return ranges.reduce((acc, r) => acc + (r.end - r.start), 0)
+}
+
+/**
  * A reversible field patch on one item. Cut/restore, text edits, and token
  * merges are all the same operation: "these fields change on this index" —
  * one undo/redo code path, and the item COUNT never changes so indices in

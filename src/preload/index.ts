@@ -27,8 +27,9 @@ const api: PoddieApi = {
     return () => ipcRenderer.removeListener(IPC.proxyProgress, listener)
   },
   getPeaks: (videoPath) => ipcRenderer.invoke(IPC.audioPeaks, videoPath),
-  exportMedia: (videoPath, ranges, kind, burnInSrt) =>
-    ipcRenderer.invoke(IPC.exportStart, videoPath, ranges, kind, burnInSrt),
+  exportMedia: (videoPath, ranges, kind, burnInSrt, defaultStem) =>
+    ipcRenderer.invoke(IPC.exportStart, videoPath, ranges, kind, burnInSrt, defaultStem),
+  exportClips: (videoPath, clips, kind) => ipcRenderer.invoke(IPC.exportClips, videoPath, clips, kind),
   exportCaptions: (videoPath, srt) => ipcRenderer.invoke(IPC.captionsExport, videoPath, srt),
   cancelExport: () => ipcRenderer.invoke(IPC.exportCancel),
   getExportProgress: () => ipcRenderer.invoke(IPC.exportPoll),

@@ -6,15 +6,19 @@ import {
   GAP_MIN_SEC,
   keptRanges,
   mergeWithPrevChanges,
+  rangesDuration,
+  rangesWithin,
   removedRanges,
   setCutSpanChanges,
   textEditChanges,
   toggleRangeChanges,
   trimSilenceChanges,
   type EditItem,
-  type ItemChange
+  type ItemChange,
+  type TimeRange
 } from '../../shared/edit'
 import { buildCues, toSrt } from '../../shared/captions'
+import { normalizeChapters } from '../../shared/chapters'
 import { findFillerSuggestions, suggestionChanges, type Suggestion } from '../../shared/cleanup'
 import { buildSearchIndex, findMatches } from './lib/transcript'
 import { errText } from './lib/errors'
@@ -28,6 +32,7 @@ import type {
   ApiKeyStatus,
   AppInfo,
   ChapterAnalysis,
+  ClipSpec,
   MediaInfo,
   PeaksResult,
   Project,
@@ -310,7 +315,21 @@ export default function App(): React.JSX.Element {
 
   const items = editState?.items ?? null
 
-  const [chapters, setChapters] = useState<ChapterAnalysis | null>(null)
+  const [rawChapters, setChapters] = useState<ChapterAnalysis | null>(null)
+
+  /**
+   * Chapter timings are repaired on the way in, not only when freshly
+   * generated: analyses saved before the fix have gaps between chapters, and
+   * a clip built from those would silently drop everything in the hole.
+   */
+  const chapters = useMemo(
+    () =>
+      rawChapters && media
+        ? { ...rawChapters, chapters: normalizeChapters(rawChapters.chapters, media.durationSec) }
+        : null,
+    [rawChapters, media]
+  )
+
   const [chapterPanelOpen, setChapterPanelOpen] = useState(false)
   const [analyzingChapters, setAnalyzingChapters] = useState(false)
 
@@ -448,9 +467,14 @@ export default function App(): React.JSX.Element {
     await runChapterAnalysis()
   }, [chapters, runChapterAnalysis])
 
+  // Indices come from the panel, which renders the NORMALIZED chapters, so the
+  // toggle must apply to those — normalization may reorder or drop what the
+  // model returned, and indexing the raw list would tick the wrong section.
+  // Writing the normalized list back also heals the stored timings for good.
   const onToggleChapterKept = useCallback((chapterIdx: number, subIdx: number) => {
-    setChapters((prev) => {
-      if (!prev) return prev
+    if (!chapters) return
+    setChapters(() => {
+      const prev = chapters
       const next: ChapterAnalysis = {
         ...prev,
         chapters: prev.chapters.map((ch, ci) =>
@@ -465,7 +489,7 @@ export default function App(): React.JSX.Element {
       if (media) window.poddie.saveChapters(media.path, next, engine).catch(() => {})
       return next
     })
-  }, [media, engine])
+  }, [chapters, media, engine])
 
   const applyChapterCuts = useCallback(() => {
     if (!chapters || !items) return
@@ -495,6 +519,15 @@ export default function App(): React.JSX.Element {
   const kept = useMemo(
     () => (items && media ? keptRanges(items, media.durationSec) : []),
     [items, media]
+  )
+
+  /** Playable seconds each chapter still has after the edits. */
+  const clipSeconds = useMemo(
+    () =>
+      chapters
+        ? chapters.chapters.map((ch) => rangesDuration(rangesWithin(kept, ch.startTime, ch.endTime)))
+        : [],
+    [chapters, kept]
   )
 
   // waveform cut-edge drag: retarget cut #index to the dragged span, clamped so
@@ -623,6 +656,76 @@ export default function App(): React.JSX.Element {
     try {
       const result = await window.poddie.exportMedia(media.path, kept, kind, burnInSrt)
       if (result) setExportResult(result.outPath) // null = dialog or mid-export cancel
+    } catch (err) {
+      setError(errText(err))
+    } finally {
+      setExporting(null)
+    }
+  }
+
+  /**
+   * A chapter clip is the edit the user already made, narrowed to the
+   * chapter's window — never a fresh set of cuts. Captions are rebuilt
+   * against the clip's own ranges so they stay in sync with the shorter file.
+   */
+  function clipFor(chapterIdx: number): { ranges: TimeRange[]; burnInSrt?: string } | null {
+    const ch = chapters?.chapters[chapterIdx]
+    if (!ch || !media || !items) return null
+    const ranges = rangesWithin(kept, ch.startTime, ch.endTime)
+    if (ranges.length === 0) return null
+    const wantsCaptions = burnIn && media.hasVideo && (appInfo?.canBurnCaptions ?? false)
+    const srt = wantsCaptions ? toSrt(buildCues(items, media.durationSec, ranges)) : ''
+    return { ranges, burnInSrt: srt === '' ? undefined : srt }
+  }
+
+  async function doExportChapterClip(chapterIdx: number): Promise<void> {
+    const ch = chapters?.chapters[chapterIdx]
+    const clip = clipFor(chapterIdx)
+    if (!media || !ch) return
+    setError(null)
+    setExportResult(null)
+    if (!clip) {
+      setError(`"${ch.title}" is empty: every part of it was cut`)
+      return
+    }
+    setExporting({ fraction: 0 })
+    try {
+      const result = await window.poddie.exportMedia(
+        media.path,
+        clip.ranges,
+        media.hasVideo ? 'video' : 'audio',
+        clip.burnInSrt,
+        ch.title
+      )
+      if (result) setExportResult(result.outPath)
+    } catch (err) {
+      setError(errText(err))
+    } finally {
+      setExporting(null)
+    }
+  }
+
+  async function doExportAllChapters(): Promise<void> {
+    if (!media || !chapters) return
+    setError(null)
+    setExportResult(null)
+    const clips: ClipSpec[] = []
+    for (const [i, ch] of chapters.chapters.entries()) {
+      const clip = clipFor(i)
+      if (clip) clips.push({ title: ch.title, ranges: clip.ranges, burnInSrt: clip.burnInSrt })
+    }
+    if (clips.length === 0) {
+      setError('Nothing to export: every chapter is fully cut')
+      return
+    }
+    setExporting({ fraction: 0 })
+    try {
+      const result = await window.poddie.exportClips(
+        media.path,
+        clips,
+        media.hasVideo ? 'video' : 'audio'
+      )
+      if (result) setExportResult(result.outDir)
     } catch (err) {
       setError(errText(err))
     } finally {
@@ -783,6 +886,14 @@ export default function App(): React.JSX.Element {
                   onRegenerate={runChapterAnalysis}
                   regenerating={analyzingChapters}
                   onClose={() => setChapterPanelOpen(false)}
+                  onExportClip={doExportChapterClip}
+                  onExportAll={doExportAllChapters}
+                  clipSeconds={clipSeconds}
+                  exporting={exporting !== null}
+                  burnIn={burnIn}
+                  canBurnCaptions={appInfo?.canBurnCaptions ?? false}
+                  hasVideo={media.hasVideo}
+                  onBurnInChange={setBurnIn}
                 />
               )}
               {review && items && (

@@ -2,6 +2,7 @@ import { joinTokens } from '../shared/cjk'
 import type { LlmConfig } from './config'
 import { log } from './logger'
 import type { ChapterAnalysis, LocalLlmStatus, TranscriptSegment, TranscriptWord } from '../shared/types'
+import { normalizeChapters } from '../shared/chapters'
 
 export async function probeLocalLlm(cfg: LlmConfig): Promise<LocalLlmStatus> {
   try {
@@ -141,11 +142,14 @@ export async function analyzeChapters(
     for (const sub of ch.subchapters) {
       sub.kept = true
     }
-    if (ch.subchapters.length > 0) {
-      ch.startTime = Math.min(...ch.subchapters.map((s) => s.startTime))
-      ch.endTime = Math.max(...ch.subchapters.map((s) => s.endTime))
-    }
   }
 
-  return { chapters: parsed.chapters, model: cfg.model, createdAt: new Date().toISOString() }
+  // The model is told to span the whole episode and does not reliably obey,
+  // so the timeline is rebuilt from start times rather than trusted.
+  const chapters = normalizeChapters(parsed.chapters, durationSec)
+  if (chapters.length === 0) throw new Error('LLM returned no usable chapter timings')
+  const covered = chapters.reduce((acc, ch) => acc + (ch.endTime - ch.startTime), 0)
+  log('info', 'llm', `chapters normalized: ${chapters.length} covering ${Math.round(covered)}s of ${Math.round(durationSec)}s`)
+
+  return { chapters, model: cfg.model, createdAt: new Date().toISOString() }
 }

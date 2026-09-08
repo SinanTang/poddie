@@ -1087,3 +1087,49 @@ button.big {
     transition: none !important;
   }
 }
+
+/* Per-chapter clip export — revealed on hover so the list stays readable, but
+   kept visible whenever focus is inside it so it is reachable by keyboard. */
+.chapter-main {
+  position: relative;
+}
+.chapter-clip-group {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  white-space: nowrap;
+}
+.chapter-main:hover .chapter-clip-group,
+.chapter-clip-group:focus-within {
+  opacity: 1;
+}
+.chapter-clip:disabled {
+  opacity: 0.5;
+}
+
+/* Burn-in is a modifier of an export, so it is attached to the export button
+   rather than floating at the same level as Regenerate. */
+.export-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.caption-toggle {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  padding: 3px 7px;
+}
+.caption-toggle.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.caption-toggle:disabled {
+  opacity: 0.4;
+}
