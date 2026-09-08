@@ -300,6 +300,11 @@ textarea {
 .transcript-pane {
   flex: 1;
   min-width: 0;
+  /* Contain the children. .transcript-scroll is position:relative, so without
+     this any overflow paints ON TOP of the statically-positioned waveform
+     footer instead of being clipped. */
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--border);
@@ -840,6 +845,11 @@ progress {
 
 .wave-pane {
   flex-shrink: 0;
+  /* Opaque and positioned so the waveform is never painted over by a
+     positioned sibling above it, whatever the pane sizes are. */
+  position: relative;
+  z-index: 1;
+  background: var(--surface-0);
   border-top: 1px solid var(--border);
   padding: var(--space-1) var(--space-3);
 }

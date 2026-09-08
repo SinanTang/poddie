@@ -411,6 +411,32 @@ export default function App(): React.JSX.Element {
     setChaptersHeight(null)
     storeSize('poddie.chaptersHeight', null)
   }, [])
+
+  /**
+   * Stored sizes were chosen at some other window size, so re-fit them on
+   * mount and on every resize. Without this a size saved in a large window
+   * survives into a small one and overflows its pane — and .chapter-panel is
+   * flex-shrink:0, so it would push the transcript over the waveform footer.
+   * Storage is deliberately left alone: shrinking the window should not
+   * forget the size the user picked for a bigger one.
+   */
+  useEffect(() => {
+    const refit = (): void => {
+      const workspace = workspaceRef.current
+      if (workspace) {
+        const max = Math.max(VIDEO_PANE_MIN_PX, workspace.clientWidth - TRANSCRIPT_MIN_WIDTH_PX)
+        setVideoPaneWidth((width) => clamp(width, VIDEO_PANE_MIN_PX, max))
+      }
+      const pane = transcriptPaneRef.current
+      if (pane) {
+        const max = Math.max(CHAPTERS_MIN_HEIGHT_PX, pane.clientHeight - TRANSCRIPT_MIN_HEIGHT_PX)
+        setChaptersHeight((height) => (height === null ? null : clamp(height, CHAPTERS_MIN_HEIGHT_PX, max)))
+      }
+    }
+    refit()
+    window.addEventListener('resize', refit)
+    return () => window.removeEventListener('resize', refit)
+  }, [chapterPanelOpen, media])
   const [analyzingChapters, setAnalyzingChapters] = useState(false)
 
   const applyEdit = useCallback((changes: ItemChange[]) => {
