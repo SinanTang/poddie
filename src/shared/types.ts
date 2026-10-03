@@ -108,6 +108,15 @@ export interface Chapter {
   subchapters: Subchapter[]
 }
 
+/** One output file in a batch clip export. */
+export interface ClipSpec {
+  /** Used to name the file; sanitized main-side. */
+  title: string
+  ranges: import('./edit').TimeRange[]
+  /** SRT on this clip's own output timeline. mp4 only. */
+  burnInSrt?: string
+}
+
 export interface ChapterAnalysis {
   chapters: Chapter[]
   model: string
@@ -149,6 +158,7 @@ export const IPC = {
   proxyProgress: 'proxy:progress',
   audioPeaks: 'audio:peaks',
   exportStart: 'export:start',
+  exportClips: 'export:clips',
   exportCancel: 'export:cancel',
   exportPoll: 'export:poll',
   exportReveal: 'export:reveal',
@@ -198,8 +208,20 @@ export interface PoddieApi {
     videoPath: string,
     ranges: import('./edit').TimeRange[],
     kind: 'video' | 'audio',
-    burnInSrt?: string
+    burnInSrt?: string,
+    defaultStem?: string
   ): Promise<{ outPath: string } | null>
+  /**
+   * Batch sibling of exportMedia: pick one folder, write one file per clip.
+   * Each clip carries its own ranges, so "preserve the edits" is the caller's
+   * single decision (it passes keptRanges narrowed to the chapter) and this
+   * side stays a dumb loop. Null when the user cancels the folder dialog.
+   */
+  exportClips(
+    videoPath: string,
+    clips: ClipSpec[],
+    kind: 'video' | 'audio'
+  ): Promise<{ outDir: string; files: string[] } | null>
   /** Save dialog + write an SRT sidecar. Null when the user cancels. */
   exportCaptions(videoPath: string, srt: string): Promise<{ outPath: string } | null>
   cancelExport(): Promise<void>

@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import icon from '../../resources/icon.png?asset'
-import { exportMedia, type ExportFormat } from './export'
+import { exportMedia, safeFileStem, type ExportFormat } from './export'
 import { hasFilter } from './ffmpeg'
 import type { TimeRange } from '../shared/edit'
 import { computePeaks, ensurePreviewProxy, extractAudio, ffprobeJson, probeMedia } from './media'
@@ -17,7 +17,7 @@ import { analyzeChapters, probeLocalLlm } from './llm'
 import { asFeedbackCategory, buildFeedbackUrl, type FeedbackTechInfo } from '../shared/feedback'
 import { getLogPath, initLogger, log, logError } from './logger'
 import { fmtDuration, whisperCostUsd } from '../shared/format'
-import { IPC, type TranscribeEngine, type TranscribeProgress } from '../shared/types'
+import { IPC, type ClipSpec, type TranscribeEngine, type TranscribeProgress } from '../shared/types'
 
 // In dev, app path is the project root — picks up the user's .env (OPENAI_API_KEY)
 loadEnvFile(join(app.getAppPath(), '.env'))
@@ -217,7 +217,7 @@ app.whenReady().then(async () => {
     })
   })
 
-  handleIpc(IPC.exportStart, async (event, videoPath: string, ranges: TimeRange[], kind: 'video' | 'audio', burnInSrt?: string) => {
+  handleIpc(IPC.exportStart, async (event, videoPath: string, ranges: TimeRange[], kind: 'video' | 'audio', burnInSrt?: string, defaultStem?: string) => {
     if (exportAbort) throw new Error('An export is already running')
     if (!Array.isArray(ranges) || ranges.length === 0) throw new Error('Nothing to export: every range was cut')
     if (burnInSrt && !canBurnCaptions) {
@@ -225,10 +225,10 @@ app.whenReady().then(async () => {
     }
 
     const win = BrowserWindow.fromWebContents(event.sender)
-    const stem = basename(videoPath).replace(/\.[^.]+$/, '')
+    const stem = defaultStem ? safeFileStem(defaultStem) : `${basename(videoPath).replace(/\.[^.]+$/, '')}-edited`
     const audio = kind === 'audio'
     const { canceled, filePath: outPath } = await dialog.showSaveDialog(win!, {
-      defaultPath: join(dirname(videoPath), `${stem}-edited.${audio ? 'm4a' : 'mp4'}`),
+      defaultPath: join(dirname(videoPath), `${stem}.${audio ? 'm4a' : 'mp4'}`),
       // for audio, the dialog's format dropdown picks the container
       filters: audio
         ? [
@@ -261,6 +261,67 @@ app.whenReady().then(async () => {
       return { outPath }
     } catch (err) {
       if (exportAbort.signal.aborted) return null
+      throw err
+    } finally {
+      exportAbort = null
+    }
+  })
+
+  handleIpc(IPC.exportClips, async (event, videoPath: string, clips: ClipSpec[], kind: 'video' | 'audio') => {
+    if (exportAbort) throw new Error('An export is already running')
+    if (!Array.isArray(clips) || clips.length === 0) throw new Error('No clips to export')
+    const empty = clips.find((c) => !Array.isArray(c.ranges) || c.ranges.length === 0)
+    if (empty) throw new Error(`"${empty.title}" is empty: every part of it was cut`)
+    if (clips.some((c) => c.burnInSrt) && !canBurnCaptions) {
+      throw new Error('Caption burn-in needs an ffmpeg build with libass (the subtitles filter)')
+    }
+
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const { canceled, filePaths } = await dialog.showOpenDialog(win!, {
+      title: 'Choose a folder for the clips',
+      defaultPath: dirname(videoPath),
+      properties: ['openDirectory', 'createDirectory'],
+      buttonLabel: 'Export here'
+    })
+    if (canceled || filePaths.length === 0) return null
+    const outDir = filePaths[0]
+    const format: ExportFormat = kind === 'audio' ? 'm4a' : 'mp4'
+
+    exportAbort = new AbortController()
+    exportFraction = 0
+    const files: string[] = []
+    log('info', 'export', `clips start: ${videoPath} → ${outDir} (${clips.length} × ${format})`)
+    try {
+      for (const [i, clip] of clips.entries()) {
+        if (exportAbort.signal.aborted) break
+        // numbered so the folder sorts in episode order and two chapters
+        // sharing a title can never collide
+        const name = `${String(i + 1).padStart(2, '0')} - ${safeFileStem(clip.title)}.${format}`
+        const outPath = join(outDir, name)
+
+        let subtitlesPath: string | undefined
+        if (clip.burnInSrt && kind === 'video') {
+          subtitlesPath = join(cacheDir, `burn-in-clip-${i}.srt`)
+          await mkdir(cacheDir, { recursive: true })
+          await writeFile(subtitlesPath, clip.burnInSrt, 'utf8')
+        }
+
+        await exportMedia(videoPath, clip.ranges, outPath, format, {
+          signal: exportAbort.signal,
+          subtitlesPath,
+          // one bar across the batch: this clip's share plus the ones done
+          onProgress: (fraction) => {
+            exportFraction = (i + fraction) / clips.length
+          }
+        })
+        files.push(outPath)
+        exportFraction = (i + 1) / clips.length
+      }
+      // a cancel mid-batch keeps the clips already finished; the partial file
+      // of the interrupted one is cleaned up by exportMedia itself
+      return exportAbort.signal.aborted && files.length === 0 ? null : { outDir, files }
+    } catch (err) {
+      if (exportAbort.signal.aborted) return files.length === 0 ? null : { outDir, files }
       throw err
     } finally {
       exportAbort = null

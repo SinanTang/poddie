@@ -300,12 +300,18 @@ textarea {
 .transcript-pane {
   flex: 1;
   min-width: 0;
+  /* Contain the children. .transcript-scroll is position:relative, so without
+     this any overflow paints ON TOP of the statically-positioned waveform
+     footer instead of being clipped. */
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--border);
 }
 
 .video-pane {
+  /* width is set inline by the splitter; this is the pre-hydration fallback */
   width: 330px;
   flex-shrink: 0;
   padding: var(--space-3);
@@ -839,6 +845,11 @@ progress {
 
 .wave-pane {
   flex-shrink: 0;
+  /* Opaque and positioned so the waveform is never painted over by a
+     positioned sibling above it, whatever the pane sizes are. */
+  position: relative;
+  z-index: 1;
+  background: var(--surface-0);
   border-top: 1px solid var(--border);
   padding: var(--space-1) var(--space-3);
 }
@@ -1086,4 +1097,79 @@ button.big {
   * {
     transition: none !important;
   }
+}
+
+/* Per-chapter clip export — revealed on hover so the list stays readable, but
+   kept visible whenever focus is inside it so it is reachable by keyboard. */
+.chapter-main {
+  position: relative;
+}
+.chapter-clip-group {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  white-space: nowrap;
+}
+.chapter-main:hover .chapter-clip-group,
+.chapter-clip-group:focus-within {
+  opacity: 1;
+}
+.chapter-clip:disabled {
+  opacity: 0.5;
+}
+
+/* Burn-in is a modifier of an export, so it is attached to the export button
+   rather than floating at the same level as Regenerate. */
+.export-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.caption-toggle {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  padding: 3px 7px;
+}
+.caption-toggle.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.caption-toggle:disabled {
+  opacity: 0.4;
+}
+
+/* ---------- resizable panes ---------- */
+
+/* A thin bar with a hit area wider than it looks: negative margins let it sit
+   on top of the 1px border it is resizing, so the cursor changes exactly where
+   the seam appears rather than a few pixels off it. */
+.splitter {
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
+  background: transparent;
+  transition: background 120ms ease;
+}
+.splitter:hover,
+.splitter:active,
+.splitter:focus-visible {
+  background: var(--accent);
+  outline: none;
+}
+.splitter.vertical {
+  width: 5px;
+  margin: 0 -3px;
+  cursor: col-resize;
+}
+.splitter.horizontal {
+  height: 5px;
+  margin: -3px 0;
+  cursor: row-resize;
 }

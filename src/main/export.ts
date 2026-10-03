@@ -97,6 +97,22 @@ export function buildExportArgs(
   ]
 }
 
+/**
+ * A filename stem from an LLM-written chapter title. Titles are model output
+ * and routinely contain punctuation that is legal in a title and not in a
+ * path, so this is sanitizing untrusted text, not cosmetics. CJK is kept —
+ * the titles are in the transcript's language.
+ */
+export function safeFileStem(title: string): string {
+  const cleaned = title
+    .replace(/[/\\:*?"<>|\u0000-\u001f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[.\s]+/, '')
+    .trim()
+    .slice(0, 80)
+  return cleaned === '' ? 'clip' : cleaned
+}
+
 export interface ExportOptions {
   onProgress: (fraction: number) => void
   signal?: AbortSignal

@@ -4,6 +4,8 @@ import {
   deriveItems,
   keptRanges,
   mergeWithPrevChanges,
+  rangesDuration,
+  rangesWithin,
   removedRanges,
   setCutSpanChanges,
   textEditChanges,
@@ -305,5 +307,37 @@ describe('invariant: text edits never move audio', () => {
     edited = applyChanges(edited, mergeWithPrevChanges(edited, 4), 'next')
     expect(keptRanges(edited, DURATION)).toEqual(before)
     expect(removedRanges(edited)).toEqual(removedRanges(items))
+  })
+})
+
+describe('rangesWithin', () => {
+  const kept = [
+    { start: 0, end: 10 },
+    { start: 20, end: 30 },
+    { start: 40, end: 50 }
+  ]
+
+  test('keeps only the ranges inside the window, clamped to it', () => {
+    expect(rangesWithin(kept, 5, 25)).toEqual([
+      { start: 5, end: 10 },
+      { start: 20, end: 25 }
+    ])
+  })
+
+  test('preserves the cuts inside the window rather than filling them in', () => {
+    // the 10..20 hole is a deletion the user made; a clip must not restore it
+    expect(rangesDuration(rangesWithin(kept, 0, 30))).toBe(20)
+  })
+
+  test('returns nothing when the window lands entirely in a cut', () => {
+    expect(rangesWithin(kept, 12, 18)).toEqual([])
+  })
+
+  test('drops slivers too short to play', () => {
+    expect(rangesWithin(kept, 9.99, 20.01)).toEqual([])
+  })
+
+  test('is bounded by the window even when it exceeds the ranges', () => {
+    expect(rangesWithin(kept, -100, 1e6)).toEqual(kept)
   })
 })

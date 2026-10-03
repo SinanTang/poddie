@@ -1,5 +1,5 @@
 import { isCjk, needsSpaceBetween } from './cjk'
-import { keptRanges, type EditItem } from './edit'
+import { keptRanges, type EditItem, type TimeRange } from './edit'
 
 /**
  * Caption cue on the OUTPUT timeline (post-cut). Built from kept words only —
@@ -33,10 +33,10 @@ function textUnits(text: string): number {
  * it shifts left by the removed time before it; inside a cut it collapses to
  * the cut point. Monotonic by construction.
  */
-function buildRemap(items: EditItem[], durationSec: number): (t: number) => number {
+function buildRemap(ranges: TimeRange[]): (t: number) => number {
   const segs: { start: number; end: number; out: number }[] = []
   let acc = 0
-  for (const r of keptRanges(items, durationSec)) {
+  for (const r of ranges) {
     segs.push({ start: r.start, end: r.end, out: acc })
     acc += r.end - r.start
   }
@@ -64,8 +64,14 @@ function buildRemap(items: EditItem[], durationSec: number): (t: number) => numb
  * duration, and (softly) sentence punctuation — which 5.1a text edits can add,
  * so cleaning the transcript directly improves the captions.
  */
-export function buildCues(items: EditItem[], durationSec: number): CaptionCue[] {
-  const remap = buildRemap(items, durationSec)
+export function buildCues(
+  items: EditItem[],
+  durationSec: number,
+  ranges: TimeRange[] = keptRanges(items, durationSec)
+): CaptionCue[] {
+  const remap = buildRemap(ranges)
+  const inRanges = (item: EditItem): boolean =>
+    ranges.some((r) => item.start < r.end && item.end > r.start)
   const cues: CaptionCue[] = []
 
   let text = ''
@@ -84,6 +90,7 @@ export function buildCues(items: EditItem[], durationSec: number): CaptionCue[] 
 
   for (const item of items) {
     if (item.kind !== 'word' || item.removed || item.text === '') continue
+    if (!inRanges(item)) continue
     if (text !== '') {
       const pause = item.start - endSrc > PAUSE_BREAK_SEC
       const tooWide = units + textUnits(item.text) > MAX_CUE_UNITS

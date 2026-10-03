@@ -6,15 +6,19 @@ import {
   GAP_MIN_SEC,
   keptRanges,
   mergeWithPrevChanges,
+  rangesDuration,
+  rangesWithin,
   removedRanges,
   setCutSpanChanges,
   textEditChanges,
   toggleRangeChanges,
   trimSilenceChanges,
   type EditItem,
-  type ItemChange
+  type ItemChange,
+  type TimeRange
 } from '../../shared/edit'
 import { buildCues, toSrt } from '../../shared/captions'
+import { normalizeChapters } from '../../shared/chapters'
 import { findFillerSuggestions, suggestionChanges, type Suggestion } from '../../shared/cleanup'
 import { buildSearchIndex, findMatches } from './lib/transcript'
 import { errText } from './lib/errors'
@@ -22,12 +26,14 @@ import { FeedbackDialog } from './components/FeedbackDialog'
 import { SearchBar } from './components/SearchBar'
 import { ReviewPanel } from './components/ReviewPanel'
 import { ChapterPanel } from './components/ChapterPanel'
+import { Splitter } from './components/Splitter'
 import { TranscriptView } from './components/TranscriptView'
 import { Waveform } from './components/Waveform'
 import type {
   ApiKeyStatus,
   AppInfo,
   ChapterAnalysis,
+  ClipSpec,
   MediaInfo,
   PeaksResult,
   Project,
@@ -164,6 +170,37 @@ function SettingsMenu({
 }
 
 /** The one progress pattern for every long-running job (proxy, transcribe, export). */
+/**
+ * Pane size limits. Every drag is clamped against these, so a pane can be made
+ * small but never collapsed to nothing — the user can always drag it back.
+ */
+const VIDEO_PANE_DEFAULT_PX = 330
+const VIDEO_PANE_MIN_PX = 260
+const TRANSCRIPT_MIN_WIDTH_PX = 360
+const CHAPTERS_MIN_HEIGHT_PX = 120
+const TRANSCRIPT_MIN_HEIGHT_PX = 180
+
+const clamp = (value: number, lo: number, hi: number): number => Math.min(Math.max(value, lo), hi)
+
+/** Pane sizes are a per-machine preference, so they live in localStorage. */
+function storedSize(key: string): number | null {
+  try {
+    const value = Number(window.localStorage.getItem(key))
+    return Number.isFinite(value) && value > 0 ? value : null
+  } catch {
+    return null
+  }
+}
+
+function storeSize(key: string, value: number | null): void {
+  try {
+    if (value === null) window.localStorage.removeItem(key)
+    else window.localStorage.setItem(key, String(value))
+  } catch {
+    // a blocked storage backend must not break resizing
+  }
+}
+
 function ProgressLine({
   label,
   fraction,
@@ -310,8 +347,96 @@ export default function App(): React.JSX.Element {
 
   const items = editState?.items ?? null
 
-  const [chapters, setChapters] = useState<ChapterAnalysis | null>(null)
+  const [rawChapters, setChapters] = useState<ChapterAnalysis | null>(null)
+
+  /**
+   * Chapter timings are repaired on the way in, not only when freshly
+   * generated: analyses saved before the fix have gaps between chapters, and
+   * a clip built from those would silently drop everything in the hole.
+   */
+  const chapters = useMemo(
+    () =>
+      rawChapters && media
+        ? { ...rawChapters, chapters: normalizeChapters(rawChapters.chapters, media.durationSec) }
+        : null,
+    [rawChapters, media]
+  )
+
   const [chapterPanelOpen, setChapterPanelOpen] = useState(false)
+
+  const workspaceRef = useRef<HTMLDivElement | null>(null)
+  const transcriptPaneRef = useRef<HTMLDivElement | null>(null)
+  const chapterPanelRef = useRef<HTMLDivElement | null>(null)
+  const [videoPaneWidth, setVideoPaneWidth] = useState(
+    () => storedSize('poddie.videoPaneWidth') ?? VIDEO_PANE_DEFAULT_PX
+  )
+  /** null = untouched, so the stylesheet's default height still applies. */
+  const [chaptersHeight, setChaptersHeight] = useState<number | null>(() => storedSize('poddie.chaptersHeight'))
+  const dragBase = useRef(0)
+
+  const startVideoDrag = useCallback(() => {
+    dragBase.current = videoPaneWidth
+  }, [videoPaneWidth])
+
+  const dragVideo = useCallback((delta: number) => {
+    const workspace = workspaceRef.current
+    if (!workspace) return
+    // the pane sits on the right, so dragging the edge right shrinks it
+    const max = Math.max(VIDEO_PANE_MIN_PX, workspace.clientWidth - TRANSCRIPT_MIN_WIDTH_PX)
+    const next = clamp(dragBase.current - delta, VIDEO_PANE_MIN_PX, max)
+    setVideoPaneWidth(next)
+    storeSize('poddie.videoPaneWidth', next)
+  }, [])
+
+  const resetVideoPane = useCallback(() => {
+    setVideoPaneWidth(VIDEO_PANE_DEFAULT_PX)
+    storeSize('poddie.videoPaneWidth', null)
+  }, [])
+
+  const startChaptersDrag = useCallback(() => {
+    // untouched panels have no stored height yet — measure what CSS gave them
+    dragBase.current = chaptersHeight ?? chapterPanelRef.current?.offsetHeight ?? CHAPTERS_MIN_HEIGHT_PX
+  }, [chaptersHeight])
+
+  const dragChapters = useCallback((delta: number) => {
+    const pane = transcriptPaneRef.current
+    if (!pane) return
+    const max = Math.max(CHAPTERS_MIN_HEIGHT_PX, pane.clientHeight - TRANSCRIPT_MIN_HEIGHT_PX)
+    const next = clamp(dragBase.current + delta, CHAPTERS_MIN_HEIGHT_PX, max)
+    setChaptersHeight(next)
+    storeSize('poddie.chaptersHeight', next)
+  }, [])
+
+  const resetChaptersHeight = useCallback(() => {
+    setChaptersHeight(null)
+    storeSize('poddie.chaptersHeight', null)
+  }, [])
+
+  /**
+   * Stored sizes were chosen at some other window size, so re-fit them on
+   * mount and on every resize. Without this a size saved in a large window
+   * survives into a small one and overflows its pane — and .chapter-panel is
+   * flex-shrink:0, so it would push the transcript over the waveform footer.
+   * Storage is deliberately left alone: shrinking the window should not
+   * forget the size the user picked for a bigger one.
+   */
+  useEffect(() => {
+    const refit = (): void => {
+      const workspace = workspaceRef.current
+      if (workspace) {
+        const max = Math.max(VIDEO_PANE_MIN_PX, workspace.clientWidth - TRANSCRIPT_MIN_WIDTH_PX)
+        setVideoPaneWidth((width) => clamp(width, VIDEO_PANE_MIN_PX, max))
+      }
+      const pane = transcriptPaneRef.current
+      if (pane) {
+        const max = Math.max(CHAPTERS_MIN_HEIGHT_PX, pane.clientHeight - TRANSCRIPT_MIN_HEIGHT_PX)
+        setChaptersHeight((height) => (height === null ? null : clamp(height, CHAPTERS_MIN_HEIGHT_PX, max)))
+      }
+    }
+    refit()
+    window.addEventListener('resize', refit)
+    return () => window.removeEventListener('resize', refit)
+  }, [chapterPanelOpen, media])
   const [analyzingChapters, setAnalyzingChapters] = useState(false)
 
   const applyEdit = useCallback((changes: ItemChange[]) => {
@@ -448,9 +573,14 @@ export default function App(): React.JSX.Element {
     await runChapterAnalysis()
   }, [chapters, runChapterAnalysis])
 
+  // Indices come from the panel, which renders the NORMALIZED chapters, so the
+  // toggle must apply to those — normalization may reorder or drop what the
+  // model returned, and indexing the raw list would tick the wrong section.
+  // Writing the normalized list back also heals the stored timings for good.
   const onToggleChapterKept = useCallback((chapterIdx: number, subIdx: number) => {
-    setChapters((prev) => {
-      if (!prev) return prev
+    if (!chapters) return
+    setChapters(() => {
+      const prev = chapters
       const next: ChapterAnalysis = {
         ...prev,
         chapters: prev.chapters.map((ch, ci) =>
@@ -465,7 +595,7 @@ export default function App(): React.JSX.Element {
       if (media) window.poddie.saveChapters(media.path, next, engine).catch(() => {})
       return next
     })
-  }, [media, engine])
+  }, [chapters, media, engine])
 
   const applyChapterCuts = useCallback(() => {
     if (!chapters || !items) return
@@ -495,6 +625,15 @@ export default function App(): React.JSX.Element {
   const kept = useMemo(
     () => (items && media ? keptRanges(items, media.durationSec) : []),
     [items, media]
+  )
+
+  /** Playable seconds each chapter still has after the edits. */
+  const clipSeconds = useMemo(
+    () =>
+      chapters
+        ? chapters.chapters.map((ch) => rangesDuration(rangesWithin(kept, ch.startTime, ch.endTime)))
+        : [],
+    [chapters, kept]
   )
 
   // waveform cut-edge drag: retarget cut #index to the dragged span, clamped so
@@ -623,6 +762,76 @@ export default function App(): React.JSX.Element {
     try {
       const result = await window.poddie.exportMedia(media.path, kept, kind, burnInSrt)
       if (result) setExportResult(result.outPath) // null = dialog or mid-export cancel
+    } catch (err) {
+      setError(errText(err))
+    } finally {
+      setExporting(null)
+    }
+  }
+
+  /**
+   * A chapter clip is the edit the user already made, narrowed to the
+   * chapter's window — never a fresh set of cuts. Captions are rebuilt
+   * against the clip's own ranges so they stay in sync with the shorter file.
+   */
+  function clipFor(chapterIdx: number): { ranges: TimeRange[]; burnInSrt?: string } | null {
+    const ch = chapters?.chapters[chapterIdx]
+    if (!ch || !media || !items) return null
+    const ranges = rangesWithin(kept, ch.startTime, ch.endTime)
+    if (ranges.length === 0) return null
+    const wantsCaptions = burnIn && media.hasVideo && (appInfo?.canBurnCaptions ?? false)
+    const srt = wantsCaptions ? toSrt(buildCues(items, media.durationSec, ranges)) : ''
+    return { ranges, burnInSrt: srt === '' ? undefined : srt }
+  }
+
+  async function doExportChapterClip(chapterIdx: number): Promise<void> {
+    const ch = chapters?.chapters[chapterIdx]
+    const clip = clipFor(chapterIdx)
+    if (!media || !ch) return
+    setError(null)
+    setExportResult(null)
+    if (!clip) {
+      setError(`"${ch.title}" is empty: every part of it was cut`)
+      return
+    }
+    setExporting({ fraction: 0 })
+    try {
+      const result = await window.poddie.exportMedia(
+        media.path,
+        clip.ranges,
+        media.hasVideo ? 'video' : 'audio',
+        clip.burnInSrt,
+        ch.title
+      )
+      if (result) setExportResult(result.outPath)
+    } catch (err) {
+      setError(errText(err))
+    } finally {
+      setExporting(null)
+    }
+  }
+
+  async function doExportAllChapters(): Promise<void> {
+    if (!media || !chapters) return
+    setError(null)
+    setExportResult(null)
+    const clips: ClipSpec[] = []
+    for (const [i, ch] of chapters.chapters.entries()) {
+      const clip = clipFor(i)
+      if (clip) clips.push({ title: ch.title, ranges: clip.ranges, burnInSrt: clip.burnInSrt })
+    }
+    if (clips.length === 0) {
+      setError('Nothing to export: every chapter is fully cut')
+      return
+    }
+    setExporting({ fraction: 0 })
+    try {
+      const result = await window.poddie.exportClips(
+        media.path,
+        clips,
+        media.hasVideo ? 'video' : 'audio'
+      )
+      if (result) setExportResult(result.outDir)
     } catch (err) {
       setError(errText(err))
     } finally {
@@ -772,8 +981,8 @@ export default function App(): React.JSX.Element {
 
       {media ? (
         <>
-          <div className="workspace">
-            <div className="transcript-pane">
+          <div className="workspace" ref={workspaceRef}>
+            <div className="transcript-pane" ref={transcriptPaneRef}>
               {chapterPanelOpen && chapters && (
                 <ChapterPanel
                   chapters={chapters}
@@ -783,6 +992,25 @@ export default function App(): React.JSX.Element {
                   onRegenerate={runChapterAnalysis}
                   regenerating={analyzingChapters}
                   onClose={() => setChapterPanelOpen(false)}
+                  onExportClip={doExportChapterClip}
+                  onExportAll={doExportAllChapters}
+                  clipSeconds={clipSeconds}
+                  exporting={exporting !== null}
+                  burnIn={burnIn}
+                  canBurnCaptions={appInfo?.canBurnCaptions ?? false}
+                  hasVideo={media.hasVideo}
+                  onBurnInChange={setBurnIn}
+                  panelRef={chapterPanelRef}
+                  style={chaptersHeight === null ? undefined : { height: chaptersHeight, maxHeight: 'none' }}
+                />
+              )}
+              {chapterPanelOpen && chapters && (
+                <Splitter
+                  orientation="horizontal"
+                  onDragStart={startChaptersDrag}
+                  onDrag={dragChapters}
+                  onReset={resetChaptersHeight}
+                  label="Resize chapters panel"
                 />
               )}
               {review && items && (
@@ -854,7 +1082,15 @@ export default function App(): React.JSX.Element {
               )}
             </div>
 
-            <aside className="video-pane">
+            <Splitter
+              orientation="vertical"
+              onDragStart={startVideoDrag}
+              onDrag={dragVideo}
+              onReset={resetVideoPane}
+              label="Resize video panel"
+            />
+
+            <aside className="video-pane" style={{ width: videoPaneWidth }}>
               {playerSrc ? (
                 media.hasVideo ? (
                   <video ref={setVideoEl} key={playerSrc} className="player" controls src={playerSrc} />
